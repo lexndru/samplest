@@ -1,0 +1,10 @@
+{
+	"request": {
+		"route": "/api/v1/person/:person",
+		"method": "get" 
+	},
+	"response": {
+		"code": 200,
+		"data": "Hello! My name is {{name.firstName}} {{name.lastName}} and I work as a {{name.jobTitle}}."
+	}
+}

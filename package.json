@@ -1,0 +1,32 @@
+{
+  "name": "samplest",
+  "version": "1.0.0",
+  "description": "Sample REST development API with dummy data",
+  "main": "index.js",
+  "bin": {
+    "samplest": "index.js"
+  },
+  "engines": {
+    "node": ">=6"
+  },
+  "preferGlobal": true,
+  "author": "Alexandru Catrina",
+  "license": "MIT",
+  "repository": "github:lexndru/samplest",
+  "homepage": "https://github.com/lexndru/samplest",
+  "keywords": [
+    "development tools",
+    "mockup api",
+    "dummy data"
+  ],
+  "dependencies": {
+    "express": "^4.17.1",
+    "faker": "^4.1.0"
+  },
+  "devDependencies": {
+    "standard": "^14.3.4"
+  },
+  "scripts": {
+    "lint": "standard"
+  }
+}
