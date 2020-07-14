@@ -1,0 +1,14 @@
+{
+    "request": {
+        "route": "/api/v1/book",
+        "method": "post",
+        "payload": {
+            "title": "The lord of the rings",
+            "author": "J. R. R. Tolkien"
+        }
+    },
+    "response": {
+        "code": 201,
+        "data": "Successfully added {payload.title}"
+    }
+}

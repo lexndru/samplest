@@ -1,7 +1,7 @@
 {
 	"request": {
 		"route": "/api/v1/person/:person",
-		"method": "get" 
+		"method": "get"
 	},
 	"response": {
 		"code": 200,

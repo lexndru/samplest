@@ -24,6 +24,7 @@
     "faker": "^4.1.0"
   },
   "devDependencies": {
+    "@types/express": "^4.17.7",
     "standard": "^14.3.4"
   },
   "scripts": {

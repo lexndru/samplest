@@ -10,7 +10,6 @@
 			"name": "{{commerce.productName}}",
 			"price": "{{commerce.price}}",
 			"description": "{{commerce.product}}"
-
 		}
 	}
 }

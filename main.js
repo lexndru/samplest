@@ -25,6 +25,95 @@ const faker = require('faker')
 const express = require('express')
 
 /**
+ * Supported HTTP verbs
+ *
+ * @type {string[]}
+ */
+const HTTP_VERBS = ['get', 'post', 'put', 'delete']
+
+/**
+ * Request interface.
+ *
+ * @type {{
+ *  route: string,
+ *  method: string,
+ *  query_string: object,
+ *  payload: any,
+ *  headers: object,
+ *  validators: { test: string, assert: string }[],
+ *  $query_string: object,
+ *  $payload: object,
+ *  $headers: object
+ * }}
+ */
+const Request = {
+    "route": "endpoint with optional :placeholder(s)",
+    "method": "get | post | put | delete",
+    "query_string": {
+        "param1": "value or :placeholder",
+        "param2": ["value", ":placeholder"],
+    },
+    "$query_string": {
+        "param1": "string | array | required",
+        "param2": "string | array | required",
+    },
+    "payload": {
+        "field1": "value or :placeholder",
+        "field2": "value or :placeholder",
+    },
+    "$payload": {
+        "field1": "string | numer | boolean | array | object | nullable | required",
+        "field2": "string | numer | boolean | array | object | nullable | required",
+    },
+    "headers": {
+        "X-Some-Header1": "value or :placeholder",
+        "X-Some-Header2": "value or :placeholder",
+    },
+    "$headers": {
+        "X-Some-Header1": "required",
+    },
+    "validators": [
+        {
+            "test": "any JS code that can run as a lambda function with the request as input",
+            "assert": "The error message returned in a human readable format"
+        },
+        {
+            "test": "headers['X-Some-Header3'] !== undefined",
+            "assert": "Missing header X-Some-Header3"
+        }
+    ]
+}
+
+/**
+ * Response interface.
+ *
+ * @type {{
+ *  code: string|number,
+ *  headers: object,
+ *  data: any,
+ *  $data: any
+ * }}
+ */
+const Response = {
+    "code": "valid HTTP status code",
+    "headers": {
+        "Powered-By": "Samplest"
+    },
+    "data": {
+        "id": "generated value or :placeholder",
+        "username": "generated value or :placeholder",
+        "books": [
+            "generated value 1",
+            "generated value 2"
+        ]
+    },
+    "$data": {
+        "id": "number",
+        "books": "array repeat:20"
+    }
+}
+
+/**
  * Read a file asynchrounously and return its content as string.
  *
  * @param {string} fp The absolute file path
@@ -32,8 +121,7 @@ const express = require('express')
  */
 function getFileContent (fp) {
     return new Promise((resolve, reject) => {
-        const opts = { encoding: 'UTF-8' }
-        fs.readFile(fp, opts, (err, data) => err ? reject(err) : resolve(data))
+        fs.readFile(fp, 'utf8', (err, data) => err ? reject(err) : resolve(data))
     })
 }
 
@@ -66,50 +154,99 @@ async function * scanDirectory (dirpath) {
 }
 
 /**
- * Generate a response with random dummy data or static content.
+ * Probe incoming request configuration.
  *
- * @param {any} content The formated response data
- * @param {number} repeat How many times to repeat the content
- * @param {object} variables The parameters of the request
- * @returns {any} The formated response data (altered)
+ * @param {{
+ *  route: string,
+ *  method: string,
+ *  query_string: object|undefined,
+ *  payload: any|undefined,
+ *  headers: object|undefined,
+ *  validators: { test: string, assert: string }[]|undefined
+ * }} request The incoming request
+ * @throws {Error} Unsupported HTTP method
+ * @throws {Error} Endpoint must be a non-empty string
+ * @throws {Error} Validator test and assert must be strings
+ * @returns void
  */
-function generateRequestResponse (content, repeat, variables) {
-    if (Array.isArray(content)) {
-        const contents = []
-        while (repeat-- > 0) {
-            for (let i = 0; i < content.length; i++) {
-                content[i] = generateRequestResponse(content[i], repeat, variables)
+function probeRequestSample (request) {
+    if (HTTP_VERBS.indexOf(request.method.toLowerCase()) === -1) {
+        throw new Error(`Unsupported HTTP method: ${request.method}`)
+    } else if ( ! request.route || request.route.length === 0) {
+        throw new Error('Endpoint must be a non-empty string')
+    } else if (typeof request.validators === 'object') {
+        for (const { test, assert } of request.validators) {
+            if (typeof test !== 'string' || typeof assert !== 'string') {
+                throw new Error('Validator test and assert must be strings')
             }
-            contents.push(...content)
         }
-        content = contents
-    } else if (typeof content === 'object') {
-        Object.keys(content).forEach(key => {
-            content[key] = generateRequestResponse(content[key], 0, variables)
-        })
-    } else if (typeof content === 'string') {
-        Object.entries(variables).forEach(([key, value]) => {
+    }
+}
+
+/**
+ * Probe outgoing response configuration.
+ *
+ * @param {{
+ *  code: string|number,
+ *  headers: object,
+ *  data: any
+ * }} response The outgoing response
+ * @throws {Error} Response status code must be a number
+ * @throws {Error} Unsupported HTTP status code
+ * @returns void
+ */
+function probeResponseSample(response) {
+    const statusCode = parseInt(response.code.toString())
+    if (isNaN(statusCode)) {
+        throw new Error('Response status code must be a number')
+    } else if (statusCode < 100 || statusCode > 599) {
+        // NOTE: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
+        throw new Error(`Unsupported HTTP status code: ${statusCode}`)
+    }
+}
+
+/**
+ * Replace placeholders in a given content.
+ *
+ * @param {string} content The content to process
+ * @param {object[]} placeholders Available placeholders to use
+ * @returns {string}
+ */
+function replacePlaceholders (content, ...placeholders) {
+    for (const each of placeholders) {
+        Object.entries(each).forEach(([key, value]) => {
             content = content.replace(`:${key}`, value)
         })
-        content = faker.fake(content)
     }
+
     return content
 }
 
 /**
- * Register new route to serve on development API with formatted response.
+ * Generate a response with random dummy data or static content.
  *
- * @param {{ code: number, data: any, headers: object, repeat: number }} Response format options
- * @returns {CallableFunction}
+ * @param {string} content Response template as unserialized JSON
+ * @param {object[]} variables Available placeholders from request
+ * @returns {any} The formated response data (altered)
  */
-function registerHttpCall ({ code, data, headers, repeat = 1 }) {
-    return async function (req, res) {
-        const content = JSON.parse(JSON.stringify(data))
-        if (headers && typeof headers === 'object') {
-            res.set(headers)
+function generateContent (content, variables) {
+    const data = JSON.parse(content)
+    if (Array.isArray(data)) {
+        const dataset = []
+        for (const item of data) {
+            dataset.push(generateContent(JSON.stringify(item), variables))
         }
-        res.status(code).json(generateRequestResponse(content, repeat, req.params))
+        return dataset
+    } else if (typeof data === 'object') {
+        Object.entries(data).forEach(([key, value]) => {
+            data[key] = generateContent(JSON.stringify(value), variables)
+        })
+        return data
+    } else if (typeof data === 'string') {
+        return faker.fake(replacePlaceholders(data, ...variables))
     }
+
+    return data
 }
 
 /**
@@ -121,22 +258,26 @@ function registerHttpCall ({ code, data, headers, repeat = 1 }) {
  */
 async function bootstrap (api, dirs) {
     for (const dir of dirs) {
-        const dirpath = path.join(__dirname, dir)
-        for await (const [file, content] of scanDirectory(dirpath)) {
+        for await (const [file, content] of scanDirectory(dir)) {
             try {
                 const { request, response } = JSON.parse(content)
-                if (['get', 'post', 'put', 'delete'].indexOf(request.method) > -1) {
-                    const handler = registerHttpCall(response)
-                    api[request.method](request.route, handler)
-                    console.log(`Loaded samples from ${file}`)
-                } else {
-                    console.log(`Cannot load samples from ${file} because of unsupported HTTP method: ${request.method}`)
-                }
+                probeRequestSample(request)
+                probeResponseSample(response)
+                const responseContent = JSON.stringify(response.data)
+                api[request.method](request.route, async (req, res) => {
+                    const content = generateContent(responseContent, [req.params])
+                    if (response.headers && typeof response.headers === 'object') {
+                        res.set(replacePlaceholders(response.headers, req.headers))
+                    }
+                    res.status(response.code).json(content)
+                })
+                console.log(`${request.method.toUpperCase()} ${request.route} (from ${file})`)
             } catch (e) {
                 console.log(`Error parsing file ${file}: ${e.meesage}`)
             }
         }
     }
+
     return api
 }
 
@@ -148,7 +289,7 @@ async function bootstrap (api, dirs) {
  */
 async function main (args) {
     const host = process.env.HOST || '127.0.0.1'
-    const port = process.env.PORT || 9003
+    const port = process.env.PORT || 8080
     const dirs = args.slice(2)
     if (dirs.length > 0) {
         const api = await bootstrap(express(), dirs)

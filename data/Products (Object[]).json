@@ -5,14 +5,14 @@
 	},
 	"response": {
 		"code": 200,
-		"data": [{
+		"data": [
+                    {
 			"id": "{{random.number}}",
 			"name": "{{commerce.productName}}",
 			"price": "{{commerce.price}}",
 			"description": "{{commerce.product}}",
 			"image": "{{image.imageUrl}}"
-
-		}],
-		"repeat": 30
+		    }
+                ]
 	}
 }
