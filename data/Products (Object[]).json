@@ -5,13 +5,27 @@
 	},
 	"response": {
 		"code": 200,
+                "headers": {
+                    "X-Powered-By": "Samplest"
+                },
 		"data": [
                     {
 			"id": "{{random.number}}",
 			"name": "{{commerce.productName}}",
 			"price": "{{commerce.price}}",
 			"description": "{{commerce.product}}",
-			"image": "{{image.imageUrl}}"
+			"image": "{{image.imageUrl}}",
+                        "related": [
+                            {
+                                "id": "{{random.number}}"
+                            },
+                            {
+                                "id": "{{random.number}}"
+                            },
+                            {
+                                "id": "{{random.number}}"
+                            }
+                        ]
 		    }
                 ]
 	}

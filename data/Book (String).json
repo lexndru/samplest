@@ -5,10 +5,17 @@
         "payload": {
             "title": "The lord of the rings",
             "author": "J. R. R. Tolkien"
+        },
+        "headers": {
+            "X-Test": "Header content goes here"
         }
     },
     "response": {
         "code": 201,
-        "data": "Successfully added {payload.title}"
+        "data": [
+            "Successfully added {payload.title} by {payload.author}",
+            "Would you like to know more about {{name.firstName}}?",
+            "This is a header {headers.X-Test}"
+        ]
     }
 }
