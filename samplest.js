@@ -105,17 +105,41 @@ class RequestHandler {
         this.method = this.validateHttpRouteMethod(method)
         this.query = query
         this.$query = $query
-        this.headers = headers
+        this.headers = this.validateHeaders(headers)
         this.$headers = $headers
         this.payload = this.validatePayload(payload)
         this.$payload = $payload
     }
 
     /**
+     * Check if the request headers are correct.
+     *
+     * @param {object} headers The headers to validate
+     * @throws {Error} Duplicated headers not allowed
+     * @returns {object}
+     */
+    validateHeaders (headers) {
+        const lowercaseHeaders = {}
+        if ( ! headers) {
+            return lowercaseHeaders
+        }
+
+        for (const [k, v] of Object.entries(headers)) {
+            const key = k.toLowerCase()
+            if (key in lowercaseHeaders) {
+                throw new Error(`Duplicated headers not allowed: ${k}/${key}`)
+            }
+            lowercaseHeaders[key] = v // NOTE: Element implicitly is any type?
+        }
+
+        return lowercaseHeaders
+    }
+
+    /**
      * Check if the request payload has a correct format.
      *
      * @param {object} payload The payload to validate
-     * @throws Error Unsupported request payload as array
+     * @throws {Error} Unsupported request payload as array
      * @returns {object}
      */
     validatePayload (payload) {
@@ -130,7 +154,7 @@ class RequestHandler {
      * Check if the request endpoint is set.
      *
      * @param {string} route The route to validate
-     * @throws Error Request route must be a non-empty string
+     * @throws {Error} Request route must be a non-empty string
      * @returns {string}
      */
     validateHttpRoute (route) {
@@ -145,7 +169,7 @@ class RequestHandler {
      * Check if the request method is set to a supported RESTful verb.
      *
      * @param {string} method The HTTP method to validate
-     * @throws Error Unsupported HTTP method
+     * @throws {Error} Unsupported HTTP method
      * @returns {string}
      */
     validateHttpRouteMethod (method) {
@@ -218,8 +242,8 @@ class ResponseHandler {
      * Check if the response code is an HTTP status code.
      *
      * @param {string} code The status code to validate
-     * @throws Response HTTP status code invalid
-     * @throws Unsupported response HTTP status code
+     * @throws {Error} Response HTTP status code invalid
+     * @throws {Error} Unsupported response HTTP status code
      * @returns void
      */
     validateStatusCode (code) {
@@ -308,13 +332,13 @@ const RequestContext = {
  */
 function lookup (heystack, ...fields) {
     if (fields.length > 0) {
-        const field = fields.shift()
-        if (field && heystack.hasOwnProperty(field)) {
-            const value = heystack[field]
+        const key = (fields.shift() || '').toLowerCase()
+        if (heystack.hasOwnProperty(key)) {
+            const value = heystack[key]
             if (typeof value === 'object' && value.constructor === Object) {
                 return lookup(value, ...fields)
             } else {
-                return value
+                return value.toString()
             }
         }
     }
@@ -331,7 +355,7 @@ function lookup (heystack, ...fields) {
 function * capture (content) {
     let placeholder
 
-    const regex = /\{{1}([a-z0-9\.]+)\}{1}/ig
+    const regex = /\{{1}([a-z0-9\.\-]+)\}{1}/ig
     while ((placeholder = regex.exec(content)) !== null) {
         yield placeholder[1]
     }

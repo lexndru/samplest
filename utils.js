@@ -110,6 +110,8 @@ class ContentBuilder {
     constructor (request, response) {
         this.request = request
         this.response = response
+        this.headers = JSON.stringify(response.headers)
+        this.content = JSON.stringify(response.data)
     }
 
     /**
@@ -128,19 +130,17 @@ class ContentBuilder {
      * }}
      */
     refresh (req) {
-        const headers = JSON.stringify(this.response.headers)
-        const content = JSON.stringify(this.response.data)
-        const context = {
-            route: req.params,
-            query: Object.assign({}, req.query, this.request.query),
-            headers: Object.assign({}, req.headers, this.request.headers),
-            payload: Object.assign({}, req.body, this.request.payload),
+        const ctx = {
+            route: Object.assign({}, req.params),
+            query: Object.assign({}, this.request.query, req.query),
+            headers: Object.assign({}, this.request.headers, req.headers),
+            payload: Object.assign({}, this.request.payload, req.body),
         }
 
         return {
             code: this.response.code,
-            headers: headers ? generateContent(headers, context) : null,
-            content: content ? generateContent(content, context) : null,
+            headers: this.headers ? generateContent(this.headers, ctx) : null,
+            content: this.content ? generateContent(this.content, ctx) : null,
         }
     }
 }
