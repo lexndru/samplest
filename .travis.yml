@@ -1,0 +1,11 @@
+language: node_js
+node_js:
+  - "10"
+
+git:
+  depth: 3
+
+install:
+  - npm install
+  - npm run test
+  - npm install . -g

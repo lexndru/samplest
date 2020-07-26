@@ -38,24 +38,24 @@ const projectPath = join(__dirname, 'package.json')
 const packageJson = readFileSync(projectPath, 'utf8')
 const { version } = JSON.parse(packageJson)
 const cmd = new ArgumentParser({
-    version,
-    addHelp: true, 
-    description: `Sample REST API for development`
+  version,
+  addHelp: true,
+  description: 'Sample REST API for development'
 })
 
-// 
+//
 cmd.addArgument('dir', {
-    help: 'The directory to scan for samplests'
+  help: 'The directory to scan for samplests'
 })
 
 //
 cmd.addArgument(['-s', '--support'], {
-    help: 'List supported content generators'
+  help: 'List supported content generators'
 })
 
 //
 cmd.addArgument(['-d', '--dump'], {
-    help: 'Dump a samplest in JSON format'
+  help: 'Dump a samplest in JSON format'
 })
 
 // Application entrypoint. Parse the command line arguments and
@@ -63,11 +63,11 @@ cmd.addArgument(['-d', '--dump'], {
 // if unexpected or unsupported content is found in "samplests"
 // Please open a ticket on github if you want to contribute.
 !(async (args) => {
-    if (args.dir !== null) {
-        await bootstrap(args.dir, host, port)
-    } else if (args.support !== null) {
-        // TODO: display a list of supported generators?
-    } else if (args.dump !== null) {
-        // TODO: dump a sample samplest 
-    }
+  if (args.dir !== null) {
+    await bootstrap(args.dir, host, port)
+  } else if (args.support !== null) {
+    // TODO: display a list of supported generators?
+  } else if (args.dump !== null) {
+    // TODO: dump a sample samplest
+  }
 })(cmd.parseArgs())

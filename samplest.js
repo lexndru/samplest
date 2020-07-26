@@ -22,25 +22,85 @@
 const { fake } = require('faker')
 
 /**
- * Probe the request & response and the rules of validation between them.
+ * Lookup and return the value of a field from an object.
  *
- * @param {{ 
- *  request: RequestObject, 
- *  response: ResponseObject, 
- *  rules: RulesObject 
- * }} fileContent Key components of a samplest
- * @returns {{
- *  request: RequestHandler,
- *  response: ResponseHandler,
- *  rules: RulesHandler?
- * }}
+ * @param {any} heystack The object as heystack
+ * @param {string[]} fields The needle to lookup
+ * @returns {string|null}
  */
-function probe ({ request, response, rules }) {
-    return {
-        request: new RequestHandler(request),
-        response: new ResponseHandler(response),
-        rules: rules ? new RulesHandler(rules) : null
+function lookup (heystack, ...fields) {
+  if (fields.length > 0) {
+    const key = fields.shift() || ''
+    if (key in heystack) {
+      const value = heystack[key]
+      if (typeof value === 'object' && value.constructor === Object) {
+        return lookup(value, ...fields)
+      } else {
+        return value.toString()
+      }
     }
+  }
+
+  return null
+}
+
+/**
+ * Capture all placeholders from content.
+ *
+ * @param {string} content The content to parse
+ * @returns {Generator}
+ */
+function * capture (content) {
+  let placeholder
+
+  const regex = /\{{1}([a-z0-9\.\-_]+)\}{1}/ig
+  while ((placeholder = regex.exec(content)) !== null) {
+    yield placeholder[1]
+  }
+}
+
+/**
+ * Interpret a given string to generate content from context.
+ *
+ * @param {string} text The string to interpret
+ * @param {RequestContextObject} ctx The available context
+ * @returns {string}
+ */
+function interpret (text, ctx) {
+  for (const variable of capture(text)) {
+    const value = lookup(ctx, ...variable.split('.'))
+    if (value !== null) {
+      text = text.replace(`{${variable}}`, value)
+    }
+  }
+
+  return text
+}
+
+/**
+ * Generate random content and interpret placeholders.
+ *
+ * @param {string} data Serialized data
+ * @param {RequestContextObject} ctx Context
+ * @returns {string|string[]|object|object[]}
+ */
+function generateContent (data, ctx) {
+  const content = JSON.parse(data)
+  if (Array.isArray(content)) {
+    for (let i = 0; i < content.length; i++) {
+      content[i] = generateContent(JSON.stringify(content[i]), ctx)
+    }
+
+    return content
+  } else if (typeof content === 'object' && content.constructor === Object) {
+    Object.entries(content).forEach(([k, v]) => {
+      content[k] = generateContent(JSON.stringify(v), ctx)
+    })
+
+    return content
+  }
+
+  return interpret(fake(content.toString()), ctx)
 }
 
 /**
@@ -58,31 +118,31 @@ function probe ({ request, response, rules }) {
  * }}
  */
 const RequestObject = {
-    "route": "endpoint with optional {placeholder(s)}",
-    "method": "get | post | put | delete",
-    "query": {
-        "param1": "value or {placeholder}",
-        "param2": ["value", "{placeholder}"],
-    },
-    "$query": {
-        "param1": "string | array | required",
-        "param2": "string | array | required",
-    },
-    "payload": {
-        "field1": "value or {placeholder}",
-        "field2": "value or {placeholder}",
-    },
-    "$payload": {
-        "field1": "string | number | boolean | array | object | required",
-        "field2": "string | number | boolean | array | object | required",
-    },
-    "headers": {
-        "X-Some-Header1": "value or {placeholder}",
-        "X-Some-Header2": "value or {placeholder}",
-    },
-    "$headers": {
-        "X-Some-Header1": "required",
-    }
+  route: 'endpoint with optional {placeholder(s)}',
+  method: 'get | post | put | delete',
+  query: {
+    param1: 'value or {placeholder}',
+    param2: ['value', '{placeholder}']
+  },
+  $query: {
+    param1: 'string | array | required',
+    param2: 'string | array | required'
+  },
+  payload: {
+    field1: 'value or {placeholder}',
+    field2: 'value or {placeholder}'
+  },
+  $payload: {
+    field1: 'string | number | boolean | array | object | required',
+    field2: 'string | number | boolean | array | object | required'
+  },
+  headers: {
+    'X-Some-Header1': 'value or {placeholder}',
+    'X-Some-Header2': 'value or {placeholder}'
+  },
+  $headers: {
+    'X-Some-Header1': 'required'
+  }
 }
 
 /**
@@ -92,102 +152,101 @@ const RequestObject = {
  * API generator.
  */
 class RequestHandler {
+  /**
+   * Initialize request handler.
+   *
+   * @param {RequestObject} r The request object to handle
+   */
+  constructor ({
+    route, method, headers, query, payload, $headers, $query, $payload
+  }) {
+    this.route = this.validateHttpRoute(route)
+    this.method = this.validateHttpRouteMethod(method)
+    this.query = query
+    this.$query = $query
+    this.headers = this.validateHeaders(headers)
+    this.$headers = $headers
+    this.payload = this.validatePayload(payload)
+    this.$payload = $payload
+  }
 
-    /**
-     * Initialize request handler.
-     *
-     * @param {RequestObject} r The request object to handle
-     */
-    constructor ({
-        route, method, headers, query, payload, $headers, $query, $payload
-    }) {
-        this.route = this.validateHttpRoute(route)
-        this.method = this.validateHttpRouteMethod(method)
-        this.query = query
-        this.$query = $query
-        this.headers = this.validateHeaders(headers)
-        this.$headers = $headers
-        this.payload = this.validatePayload(payload)
-        this.$payload = $payload
+  /**
+   * Check if the request headers are correct.
+   *
+   * @param {object} headers The headers to validate
+   * @throws {Error} Duplicated headers not allowed
+   * @returns {object}
+   */
+  validateHeaders (headers) {
+    const lowercaseHeaders = {}
+    if (!headers) {
+      return lowercaseHeaders
     }
 
-    /**
-     * Check if the request headers are correct.
-     *
-     * @param {object} headers The headers to validate
-     * @throws {Error} Duplicated headers not allowed
-     * @returns {object}
-     */
-    validateHeaders (headers) {
-        const lowercaseHeaders = {}
-        if ( ! headers) {
-            return lowercaseHeaders
-        }
-
-        for (const [k, v] of Object.entries(headers)) {
-            const key = k.toLowerCase()
-            if (key in lowercaseHeaders) {
-                throw new Error(`Duplicated headers not allowed: ${k}/${key}`)
-            }
-            lowercaseHeaders[key] = v // NOTE: Element implicitly is any type?
-        }
-
-        return lowercaseHeaders
+    for (const [k, v] of Object.entries(headers)) {
+      const key = k.toLowerCase()
+      if (key in lowercaseHeaders) {
+        throw new Error(`Duplicated headers not allowed: ${k}/${key}`)
+      }
+      lowercaseHeaders[key] = v // NOTE: Element implicitly is any type?
     }
 
-    /**
-     * Check if the request payload has a correct format.
-     *
-     * @param {object} payload The payload to validate
-     * @throws {Error} Unsupported request payload as array
-     * @returns {object}
-     */
-    validatePayload (payload) {
-        if (payload && Array.isArray(payload)) {
-            throw new Error('Unsupported request payload as array')
-        }
+    return lowercaseHeaders
+  }
 
-        return payload
+  /**
+   * Check if the request payload has a correct format.
+   *
+   * @param {object} payload The payload to validate
+   * @throws {Error} Unsupported request payload as array
+   * @returns {object}
+   */
+  validatePayload (payload) {
+    if (payload && Array.isArray(payload)) {
+      throw new Error('Unsupported request payload as array')
     }
 
-    /**
-     * Check if the request endpoint is set.
-     *
-     * @param {string} route The route to validate
-     * @throws {Error} Request route must be a non-empty string
-     * @returns {string}
-     */
-    validateHttpRoute (route) {
-        if ( ! route || route.trim().length === 0) {
-            throw new Error(`Request route must be a non-empty string`)
-        }
+    return payload
+  }
 
-        return route
+  /**
+   * Check if the request endpoint is set.
+   *
+   * @param {string} route The route to validate
+   * @throws {Error} Request route must be a non-empty string
+   * @returns {string}
+   */
+  validateHttpRoute (route) {
+    if (!route || route.trim().length === 0) {
+      throw new Error('Request route must be a non-empty string')
     }
 
-    /**
-     * Check if the request method is set to a supported RESTful verb.
-     *
-     * @param {string} method The HTTP method to validate
-     * @throws {Error} Unsupported HTTP method
-     * @returns {string}
-     */
-    validateHttpRouteMethod (method) {
-        if (RequestHandler.HTTP_VERBS.indexOf(method.toUpperCase()) === -1) {
-            throw new Error(`Unsupported request HTTP method: ${method}`)
-        }
+    return route
+  }
 
-        return method
+  /**
+   * Check if the request method is set to a supported RESTful verb.
+   *
+   * @param {string} method The HTTP method to validate
+   * @throws {Error} Unsupported HTTP method
+   * @returns {string}
+   */
+  validateHttpRouteMethod (method) {
+    if (RequestHandler.HTTP_VERBS.indexOf(method.toUpperCase()) === -1) {
+      throw new Error(`Unsupported request HTTP method: ${method}`)
     }
 
-    /**
-     * Supported HTTP verbs.
-     *
-     * @type {string[]}
-     */
-    static get HTTP_VERBS () {
-        return ['HEAD', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE']
-    }
+    return method
+  }
+
+  /**
+   * Supported HTTP verbs.
+   *
+   * @type {string[]}
+   */
+  static get HTTP_VERBS () {
+    return ['HEAD', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE']
+  }
 }
 
 /**
@@ -201,22 +260,22 @@ class RequestHandler {
  * }}
  */
 const ResponseObject = {
-    "code": "valid HTTP status code",
-    "headers": {
-        "Powered-By": "Samplest"
-    },
-    "data": {
-        "id": "generated value or {placeholder}",
-        "username": "generated value or {placeholder}",
-        "books": [
-            "generated value 1",
-            "generated value 2"
-        ]
-    },
-    "$data": {
-        "id": "number",
-        "books": "array repeat:20"
-    }
+  code: 'valid HTTP status code',
+  headers: {
+    'Powered-By': 'Samplest'
+  },
+  data: {
+    id: 'generated value or {placeholder}',
+    username: 'generated value or {placeholder}',
+    books: [
+      'generated value 1',
+      'generated value 2'
+    ]
+  },
+  $data: {
+    id: 'number',
+    books: 'array repeat:20'
+  }
 }
 
 /**
@@ -225,37 +284,36 @@ const ResponseObject = {
  * metafield configuration ($data).
  */
 class ResponseHandler {
+  /**
+   * Initialize response handler.
+   *
+   * @param {ResponseObject} r The response object to handle
+   */
+  constructor ({ code, headers, data, $data }) {
+    this.code = this.validateStatusCode(code)
+    this.headers = headers
+    this.data = data
+    this.$data = $data
+  }
 
-    /**
-     * Initialize response handler.
-     *
-     * @param {ResponseObject} r The response object to handle
-     */
-    constructor ({ code, headers, data, $data }) {
-        this.code = this.validateStatusCode(code)
-        this.headers = headers
-        this.data = data
-        this.$data = $data
+  /**
+   * Check if the response code is an HTTP status code.
+   *
+   * @param {string} code The status code to validate
+   * @throws {Error} Response HTTP status code invalid
+   * @throws {Error} Unsupported response HTTP status code
+   * @returns void
+   */
+  validateStatusCode (code) {
+    const statusCode = parseInt(code.toString())
+    if (isNaN(statusCode)) {
+      throw new Error(`Response HTTP status code invalid: ${code}`)
+    } else if (statusCode < 100 || statusCode > 599) {
+      throw new Error(`Unsupported response HTTP status: ${statusCode}`)
     }
 
-    /**
-     * Check if the response code is an HTTP status code.
-     *
-     * @param {string} code The status code to validate
-     * @throws {Error} Response HTTP status code invalid
-     * @throws {Error} Unsupported response HTTP status code
-     * @returns void
-     */
-    validateStatusCode (code) {
-        const statusCode = parseInt(code.toString())
-        if (isNaN(statusCode)) {
-            throw new Error(`Response HTTP status code invalid: ${code}`)
-        } else if (statusCode < 100 || statusCode > 599) {
-            throw new Error(`Unsupported response HTTP status: ${statusCode}`)
-        }
-
-        return code
-    }
+    return code
+  }
 }
 
 /**
@@ -264,15 +322,15 @@ class ResponseHandler {
  * @type {Record<string, string[]>}
  */
 const RulesObject = {
-    "Assert message goes here": [
-        "first function body to test",
-        "second function body to test"
-    ],
-    "Client must implement samplest request!": [
-        "route.length > 0",
-        "typeof payload.id !== 'undefined'",
-        "headers['X-Custom-Field'] === 'encoded.secret'"
-    ]
+  'Assert message goes here': [
+    'first function body to test',
+    'second function body to test'
+  ],
+  'Client must implement samplest request!': [
+    'route.length > 0',
+    "typeof payload.id !== 'undefined'",
+    "headers['X-Custom-Field'] === 'encoded.secret'"
+  ]
 }
 
 /**
@@ -281,19 +339,17 @@ const RulesObject = {
  * response with the assertion message.
  */
 class RulesHandler {
+  /**
+   * Initialize rules handler.
+   *
+   * @param {RulesObject} rules The rules object to handle
+   */
+  constructor (rules) {
+    this.rules = rules
+  }
 
-    /**
-     * Initialize rules handler.
-     *
-     * @param {RulesObject} rules The rules object to handle
-     */
-    constructor (rules) {
-        this.rules = rules
-    }
-
-    // TODO: Implement Function() evaluator to assert validation rules...
+  // TODO: Implement Function() evaluator to assert validation rules...
 }
-
 
 /**
  * Incoming request context interface.
@@ -305,104 +361,34 @@ class RulesHandler {
  *  payload: object,
  * }}
  */
-const RequestContext = {
-    "route": {
-        "username": "lexndru",
-    },
-    "query": {
-        "per_page": "10",
-        "limit": "50", 
-    },
-    "headers": {
-        "X-Header1": "abc",
-        "X-Header2": "def",
-    },
-    "payload": {
-        "projectName": "samplest",
-        "projectDesc": "mockup api from cli",
-    }
+const RequestContextObject = {
+  route: {
+    username: 'lexndru'
+  },
+  query: {
+    per_page: '10',
+    limit: '50'
+  },
+  headers: {
+    'X-Header1': 'abc',
+    'X-Header2': 'def'
+  },
+  payload: {
+    projectName: 'samplest',
+    projectDesc: 'mockup api from cli'
+  }
 }
 
-/**
- * Lookup and return the value of a field from an object.
- *
- * @param {any} heystack The object as heystack
- * @param {string[]} fields The needle to lookup
- * @returns {string|null}
- */
-function lookup (heystack, ...fields) {
-    if (fields.length > 0) {
-        const key = (fields.shift() || '').toLowerCase()
-        if (heystack.hasOwnProperty(key)) {
-            const value = heystack[key]
-            if (typeof value === 'object' && value.constructor === Object) {
-                return lookup(value, ...fields)
-            } else {
-                return value.toString()
-            }
-        }
-    }
-
-    return null
+module.exports = {
+  generateContent,
+  capture,
+  interpret,
+  lookup,
+  RequestObject,
+  RequestHandler,
+  RequestContextObject,
+  ResponseObject,
+  ResponseHandler,
+  RulesObject,
+  RulesHandler
 }
-
-/**
- * Capture all placeholders from content.
- *
- * @param {string} content The content to parse
- * @returns {Generator}
- */
-function * capture (content) {
-    let placeholder
-
-    const regex = /\{{1}([a-z0-9\.\-]+)\}{1}/ig
-    while ((placeholder = regex.exec(content)) !== null) {
-        yield placeholder[1]
-    }
-}
-
-/**
- * Interpret a given string to generate content from context.
- *
- * @param {string} text The string to interpret
- * @param {RequestContext} ctx The available context
- * @returns {string}
- */
-function interpret (text, ctx) {
-    for (const variable of capture(text)) {
-        const value = lookup(ctx, ...variable.split('.'))
-        if (value !== null) {
-            text = text.replace(`{${variable}}`, value)
-        }
-    }
-
-    return text
-}
-
-/**
- * Generate random content and interpret placeholders.
- *
- * @param {string} data Serialized data
- * @param {RequestContext} ctx Context
- * @returns {string|string[]|object|object[]}
- */
-function generateContent (data, ctx) {
-    const content = JSON.parse(data)
-    if (Array.isArray(content)) {
-        for (let i = 0; i < content.length; i++) {
-            content[i] = generateContent(JSON.stringify(content[i]), ctx)
-        }
-
-        return content
-    } else if (typeof content === 'object' && content.constructor === Object) {
-        Object.entries(content).forEach(([k, v]) => {
-            content[k] = generateContent(JSON.stringify(v), ctx)
-        })
-
-        return content
-    }
-
-    return interpret(fake(content.toString()), ctx)
-}
-
-module.exports = { probe, generateContent }

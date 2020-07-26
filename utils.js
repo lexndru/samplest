@@ -22,7 +22,15 @@
 const { readFile, readdir } = require('fs')
 const { join } = require('path')
 
-const { probe, generateContent } = require('./samplest')
+const {
+  generateContent,
+  RequestHandler,
+  RequestObject,
+  ResponseHandler,
+  ResponseObject,
+  RulesHandler,
+  RulesObject
+} = require('./samplest')
 
 const express = require('express')
 const bodyParser = require('body-parser')
@@ -34,9 +42,9 @@ const bodyParser = require('body-parser')
  * @returns {Promise<string>} The content of the file
  */
 function getFileContent (fp) {
-    return new Promise((resolve, reject) => {
-        readFile(fp, 'utf8', (err, data) => err ? reject(err) : resolve(data))
-    })
+  return new Promise((resolve, reject) => {
+    readFile(fp, 'utf8', (err, data) => err ? reject(err) : resolve(data))
+  })
 }
 
 /**
@@ -46,9 +54,9 @@ function getFileContent (fp) {
  * @returns {Promise<string[]>} List of files
  */
 function getFilesFromDirectory (dir) {
-    return new Promise((resolve, reject) => {
-        readdir(dir, (err, data) => err ? reject(err) : resolve(data))
-    })
+  return new Promise((resolve, reject) => {
+    readdir(dir, (err, data) => err ? reject(err) : resolve(data))
+  })
 }
 
 /**
@@ -58,13 +66,35 @@ function getFilesFromDirectory (dir) {
  * @returns {AsyncGenerator}
  */
 async function * scanDirectory (dirpath) {
-    const files = await getFilesFromDirectory(dirpath)
-    for (const file of files) {
-        if (file.endsWith('.json')) {
-            const content = await getFileContent(join(dirpath, file))
-            yield [file, JSON.parse(content)]
-        }
+  const files = await getFilesFromDirectory(dirpath)
+  for (const file of files) {
+    if (file.endsWith('.json')) {
+      const content = await getFileContent(join(dirpath, file))
+      yield [file, JSON.parse(content)]
     }
+  }
+}
+
+/**
+ * Probe the request & response and the rules of validation between them.
+ *
+ * @param {{
+ *  request: RequestObject,
+ *  response: ResponseObject,
+ *  rules: RulesObject
+ * }} fileContent Key components of a samplest
+ * @returns {{
+ *  request: RequestHandler,
+ *  response: ResponseHandler,
+ *  rules: RulesHandler?
+ * }}
+ */
+function probe ({ request, response, rules }) {
+  return {
+    request: new RequestHandler(request),
+    response: new ResponseHandler(response),
+    rules: rules ? new RulesHandler(rules) : null
+  }
 }
 
 /**
@@ -76,73 +106,72 @@ async function * scanDirectory (dirpath) {
  * @returns {Promise<void>}
  */
 async function bootstrap (dir, host, port) {
-    const api = express()
-    api.use(bodyParser.json())
-    api.use(bodyParser.urlencoded({ extended: true }))
+  const api = express()
+  api.use(bodyParser.json())
+  api.use(bodyParser.urlencoded({ extended: true }))
 
-    for await (const [file, content] of scanDirectory(dir)) {
-        const { request, response } = probe(content)
-        const cb = new ContentBuilder(request, response)
-        api[request.method](request.route, (req, res) => {
-            const { code, headers, content } = cb.refresh(req)
-            res.set(headers).status(code).json(content)
-        })
-        console.log(`${file} - ${request.method} ${request.route}`)
-    }
-
-    api.listen(port, host, () => {
-        console.log(`Up and running @ http://${host}:${port}`)
+  for await (const [file, content] of scanDirectory(dir)) {
+    const { request, response } = probe(content)
+    const cb = new ContentBuilder(request, response)
+    api[request.method](request.route, (req, res) => {
+      const { code, headers, content } = cb.refresh(req)
+      res.set(headers).status(code).json(content)
     })
+    console.log(`${file} - ${request.method} ${request.route}`)
+  }
+
+  api.listen(port, host, () => {
+    console.log(`Up and running @ http://${host}:${port}`)
+  })
 }
 
 /**
  * Helper class to generate response based on incoming requests.
- * Each new call regenerates the content. 
+ * Each new call regenerates the content.
  */
 class ContentBuilder {
+  /**
+   * Initialize content builder.
+   *
+   * @param {RequestObject} request
+   * @param {ResponseObject} response
+   */
+  constructor (request, response) {
+    this.request = request
+    this.response = response
+    this.headers = JSON.stringify(response.headers)
+    this.content = JSON.stringify(response.data)
+  }
 
-    /**
-     * Initialize content builder.
-     *
-     * @param {{ query: object, headers: object, payload: object }} request
-     * @param {{ code: string, headers: object, data: any }} response
-     */
-    constructor (request, response) {
-        this.request = request
-        this.response = response
-        this.headers = JSON.stringify(response.headers)
-        this.content = JSON.stringify(response.data)
+  /**
+   * Refresh the response content and response headers.
+   *
+   * @param {{
+   *  params: object,
+   *  query: object,
+   *  headers: object,
+   *  body: any
+   * }} req The incoming HTTP request
+   * @returns {{
+   *  code: string,
+   *  headers: any,
+   *  content: any,
+   * }}
+   */
+  refresh (req) {
+    const ctx = {
+      route: Object.assign({}, req.params),
+      query: Object.assign({}, this.request.query, req.query),
+      headers: Object.assign({}, this.request.headers, req.headers),
+      payload: Object.assign({}, this.request.payload, req.body)
     }
 
-    /**
-     * Refresh the response content and response headers.  
-     *
-     * @param {{ 
-     *  params: object,
-     *  query: object,
-     *  headers: object,
-     *  body: any
-     * }} req The incoming HTTP request
-     * @returns {{
-     *  code: string,
-     *  headers: any,
-     *  content: any,
-     * }}
-     */
-    refresh (req) {
-        const ctx = {
-            route: Object.assign({}, req.params),
-            query: Object.assign({}, this.request.query, req.query),
-            headers: Object.assign({}, this.request.headers, req.headers),
-            payload: Object.assign({}, this.request.payload, req.body),
-        }
-
-        return {
-            code: this.response.code,
-            headers: this.headers ? generateContent(this.headers, ctx) : null,
-            content: this.content ? generateContent(this.content, ctx) : null,
-        }
+    return {
+      code: this.response.code,
+      headers: this.headers ? generateContent(this.headers, ctx) : null,
+      content: this.content ? generateContent(this.content, ctx) : null
     }
+  }
 }
 
 module.exports = { bootstrap }

@@ -1,4 +1,5 @@
 # Samplest
+[![Build Status](https://travis-ci.org/lexndru/samplest.svg?branch=master)](https://travis-ci.org/lexndru/samplest)
 
 Sample REST API for development purpose-only.
 
