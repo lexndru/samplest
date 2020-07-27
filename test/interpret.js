@@ -67,3 +67,25 @@ describe('Interpret a given string to generate content from context', () => {
     assert.strict.equal(interpret(message, context), message)
   })
 })
+
+describe('Interpret case insensitive placeholders to generate content', () => {
+  const context = {
+    'project-name': 'samplest',
+    samplest: 'mockup api development tool'
+  }
+
+  it('should match fields in context', () => {
+    assert.strict.equal(interpret('{project-name}', context, true), context['project-name'])
+    assert.strict.equal(interpret('{Project-name}', context, true), context['project-name'])
+    assert.strict.equal(interpret('{project-NAME}', context, true), context['project-name'])
+    assert.strict.equal(interpret('{Samplest}', context, true), context.samplest)
+    assert.strict.equal(interpret('{SAMPLEST}', context, true), context.samplest)
+  })
+
+  it('shoult not match fields in context if lower flag is not set', () => {
+    assert.strict.equal(interpret('{project-name}', context, false), context['project-name'])
+    assert.strict.notEqual(interpret('{Project-Name}', context, false), context['project-name'])
+    assert.strict.notEqual(interpret('{SAMPLEST}', context, false), context.samplest)
+    assert.strict.equal(interpret('{samplest}', context, false), context.samplest)
+  })
+})

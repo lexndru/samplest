@@ -23,6 +23,7 @@ const { readFile, readdir } = require('fs')
 const { join } = require('path')
 
 const {
+  interpret,
   generateContent,
   RequestHandler,
   RequestObject,
@@ -32,6 +33,7 @@ const {
   RulesObject
 } = require('./samplest')
 
+const { fake } = require('faker')
 const express = require('express')
 const bodyParser = require('body-parser')
 
@@ -166,10 +168,22 @@ class ContentBuilder {
       payload: Object.assign({}, this.request.payload, req.body)
     }
 
+    /**
+     * @param {string} input
+     * @param {boolean} lower
+     */
+    const generate = (input, lower) => {
+      /**
+       * @param {string} text
+       */
+      const transform = (text) => interpret(fake(text), ctx, lower)
+      return generateContent(input, transform)
+    }
+
     return {
       code: this.response.code,
-      headers: this.headers ? generateContent(this.headers, ctx) : null,
-      content: this.content ? generateContent(this.content, ctx) : null
+      headers: this.headers && generate(this.headers, true),
+      content: this.content && generate(this.content, false)
     }
   }
 }

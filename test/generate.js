@@ -20,7 +20,28 @@
 
 const assert = require('assert')
 
-const { generateContent } = require('../samplest')
+const { fake } = require('faker')
+const { generateContent, interpret } = require('../samplest')
+
+describe('Generate content to reflect the data type request', () => {
+  it('should generate an array of strings and the last item as object', () => {
+    const data = [
+      'This is the first line',
+      'This is the second line',
+      {
+        text: 'This is an object',
+        list: [
+          'This is a sub-text'
+        ]
+      },
+      'This is the third line'
+    ]
+
+    const results = generateContent(JSON.stringify(data))
+
+    assert.strict.deepEqual(results, data)
+  })
+})
 
 describe('Generate content as string, string[], object, object[]', () => {
   const testObject = {
@@ -41,7 +62,7 @@ describe('Generate content as string, string[], object, object[]', () => {
   it('should return string from a JSON string', () => {
     const data = JSON.stringify('Testing content generator with {context.string}')
     const expect = `Testing content generator with ${testObject.context.string}`
-    const result = generateContent(data, testObject)
+    const result = generateContent(data, (str) => interpret(str, testObject))
     assert.strict.equal(result, expect)
   })
 
@@ -57,7 +78,7 @@ describe('Generate content as string, string[], object, object[]', () => {
         `${testObject.lines['3']} line generated`
     ]
 
-    const results = generateContent(data, testObject)
+    const results = generateContent(data, (str) => interpret(str, testObject))
 
     let i = 0
     for (; i < expect.length; i++) {
@@ -90,7 +111,7 @@ describe('Generate content as string, string[], object, object[]', () => {
       ]
     }
 
-    const result = generateContent(data, testObject)
+    const result = generateContent(data, (str) => interpret(str, testObject))
     assert.strict.equal(JSON.stringify(result), JSON.stringify(expected))
   })
 
@@ -135,7 +156,7 @@ describe('Generate content as string, string[], object, object[]', () => {
       }
     ]
 
-    const results = generateContent(data, testObject)
+    const results = generateContent(data, (str) => interpret(str, testObject))
 
     assert.strict.equal(JSON.stringify(results), JSON.stringify(expected))
   })
@@ -163,7 +184,7 @@ describe('Generate random content and interpret placeholders', () => {
       `Is your email still ${testObject.profile['e-mail']}?`
     ]
 
-    const results = generateContent(data, testObject)
+    const results = generateContent(data, (str) => interpret(fake(str), testObject))
 
     let i = 0
     for (; i < expected.length; i++) {
@@ -173,6 +194,15 @@ describe('Generate random content and interpret placeholders', () => {
 
     if (i !== expected.length) {
       assert.fail(`Expected ${expected.length} but got ${i}`)
+    }
+  })
+
+  it('should generate fake content and upper case all the content', () => {
+    const data = JSON.stringify('I work as a {{name.jobTitle}}')
+    const expected = /I WORK AS A ([A-Z\s]+)/g
+    const result = generateContent(data, (str) => fake(str).toUpperCase())
+    if (!expected.test(result)) {
+      assert.fail('Result does not match expected pattern')
     }
   })
 })

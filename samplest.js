@@ -19,8 +19,6 @@
 // SOFTWARE.
 'use strict'
 
-const { fake } = require('faker')
-
 /**
  * Lookup and return the value of a field from an object.
  *
@@ -64,11 +62,13 @@ function * capture (content) {
  *
  * @param {string} text The string to interpret
  * @param {RequestContextObject} ctx The available context
+ * @param {boolean} lower Optional flag to lowercase variable
  * @returns {string}
  */
-function interpret (text, ctx) {
+function interpret (text, ctx, lower = false) {
   for (const variable of capture(text)) {
-    const value = lookup(ctx, ...variable.split('.'))
+    const needle = lower ? variable.toLowerCase() : variable
+    const value = lookup(ctx, ...needle.split('.'))
     if (value !== null) {
       text = text.replace(`{${variable}}`, value)
     }
@@ -81,26 +81,28 @@ function interpret (text, ctx) {
  * Generate random content and interpret placeholders.
  *
  * @param {string} data Serialized data
- * @param {RequestContextObject} ctx Context
+ * @param {CallableFunction?} tf Callback to format text
  * @returns {string|string[]|object|object[]}
  */
-function generateContent (data, ctx) {
+function generateContent (data, tf = null) {
   const content = JSON.parse(data)
   if (Array.isArray(content)) {
     for (let i = 0; i < content.length; i++) {
-      content[i] = generateContent(JSON.stringify(content[i]), ctx)
+      content[i] = generateContent(JSON.stringify(content[i]), tf)
     }
 
     return content
   } else if (typeof content === 'object' && content.constructor === Object) {
     Object.entries(content).forEach(([k, v]) => {
-      content[k] = generateContent(JSON.stringify(v), ctx)
+      content[k] = generateContent(JSON.stringify(v), tf)
     })
 
     return content
   }
 
-  return interpret(fake(content.toString()), ctx)
+  const textContent = content.toString()
+
+  return tf instanceof Function ? tf(textContent) : textContent
 }
 
 /**
