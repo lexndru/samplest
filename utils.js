@@ -27,6 +27,7 @@ const {
   generateContent,
   RequestHandler,
   RequestObject,
+  RequestContextObject,
   ResponseHandler,
   ResponseObject,
   RulesHandler,
@@ -111,6 +112,7 @@ async function bootstrap (dir, host, port) {
   const api = express()
   api.use(bodyParser.json())
   api.use(bodyParser.urlencoded({ extended: true }))
+  api.use(bodyParser.text())
 
   for await (const [file, content] of scanDirectory(dir)) {
     const { request, response } = probe(content)
@@ -143,6 +145,7 @@ class ContentBuilder {
     this.response = response
     this.headers = JSON.stringify(response.headers)
     this.content = JSON.stringify(response.data)
+    this.metadata = { ...response.$data }
   }
 
   /**
@@ -161,12 +164,7 @@ class ContentBuilder {
    * }}
    */
   refresh (req) {
-    const ctx = {
-      route: Object.assign({}, req.params),
-      query: Object.assign({}, this.request.query, req.query),
-      headers: Object.assign({}, this.request.headers, req.headers),
-      payload: Object.assign({}, this.request.payload, req.body)
-    }
+    const ctx = this.buildContext(req)
 
     /**
      * @param {string} input
@@ -180,11 +178,72 @@ class ContentBuilder {
       return generateContent(input, transform)
     }
 
+    const content = this.content && generate(this.content, false)
+    const headers = this.headers && generate(this.headers, true)
+
     return {
       code: this.response.code,
-      headers: this.headers && generate(this.headers, true),
-      content: this.content && generate(this.content, false)
+      headers: {
+        ...headers,
+        'X-Powered-By': 'samplest',
+        'X-Delivery-Time': new Date()
+      },
+      content: this.processContent(content)
     }
+  }
+
+  /**
+   * Build current context for incoming HTTP request.
+   *
+   * @param {{
+   *  params: object,
+   *  query: object,
+   *  headers: object,
+   *  body: any
+   * }} req The incoming HTTP request
+   * @returns {RequestContextObject}
+   */
+  buildContext (req) {
+    return {
+      time: new Date().getTime().toFixed(0),
+      route: Object.assign({}, req.params),
+      query: Object.assign({}, this.request.query, req.query),
+      headers: Object.assign({}, this.request.headers, req.headers),
+      payload: Object.assign({}, this.request.payload, req.body)
+    }
+  }
+
+  /**
+   * Get a copy of the response data after all metadata have been processed.
+   *
+   * @param {any} content
+   * @returns {any}
+   */
+  processContent (content) {
+    if (this.metadata.repeat && Array.isArray(content)) {
+      let repeat = -1
+      if (this.metadata.repeat.indexOf('..') > -1) {
+        let [min, max] = this.metadata.repeat.split('..', 2)
+        min = parseInt(min, 10) || content.length
+        max = parseInt(max, 10) || content.length + min
+        repeat = Math.ceil(Math.random() * (max - min + 1))
+      } else {
+        repeat = parseInt(this.metadata.repeat.toString(), 10)
+      }
+      if (repeat > -1) {
+        const stack = new Array()
+        for (let i = 0; i < repeat; i++) {
+          stack.push(content)
+        }
+        content = [].concat(...stack)
+      }
+    }
+
+    if (this.metadata && this.metadata.cast) {
+      // TODO: implement cast
+    }
+
+    return content
   }
 }
 

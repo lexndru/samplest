@@ -6,10 +6,16 @@
 	"response": {
 		"code": 200,
 		"data": {
-			"id": ":product",
+			"id": "{route.product}",
 			"name": "{{commerce.productName}}",
 			"price": "{{commerce.price}}",
 			"description": "{{commerce.product}}"
-		}
+		},
+                "$data": {
+                    "cast": {
+                        "id": "number"
+                    }
+                }
+
 	}
 }

@@ -164,14 +164,14 @@ class CommonHandler {
    *
    * @param {object} headers The headers to validate
    * @throws {Error} Duplicated headers not allowed
-   * @returns {object}
+   * @returns {object?}
    */
   validateHeaders (headers) {
-    const lowercaseHeaders = {}
-    if (!headers) {
-      return lowercaseHeaders
+    if (headers === undefined) {
+      return {}
     }
 
+    const lowercaseHeaders = {}
     for (const [k, v] of Object.entries(headers)) {
       const key = k.toLowerCase()
       if (key in lowercaseHeaders) {
@@ -240,9 +240,13 @@ class RequestHandler extends CommonHandler {
      *
      * @param {object} query The query string to validate
      * @throws {Error} Query string must be string or string[]
-     * @returns {object}
+     * @returns {object?}
      */
   validateQueryString (query) {
+    if (query === undefined) {
+      return {}
+    }
+
     if (query && typeof query === 'object' && query.constructor === Object) {
       Object.entries(query).forEach(([key, value]) => {
         if (!Array.isArray(value)) {
@@ -269,9 +273,13 @@ class RequestHandler extends CommonHandler {
    *
    * @param {object|string} payload The payload to validate
    * @throws {Error} Request payload must be an object or a string
-   * @returns {object|string}
+   * @returns {object|string|null}
    */
   validatePayload (payload) {
+    if (payload === undefined) {
+      return null
+    }
+
     if (typeof payload === 'object' && payload.constructor === Object) {
       return payload
     } else if (payload && payload.toString() === payload) {
@@ -395,7 +403,7 @@ class ResponseHandler extends CommonHandler {
    * Check if the metadata fields are supported.
    *
    * @param {ResponseMetadataObject} $data The metadata to validate
-   * @returns {object?}
+   * @returns {ResponseMetadataObject?}
    */
   validateMetadata ($data) {
     if ($data && typeof $data === 'object' && $data.constructor === Object) {
@@ -428,15 +436,22 @@ class ResponseHandler extends CommonHandler {
       throw new Error('Cannot use meta repeat on a non-array data')
     }
 
-    let [min, max] = repeat.split('..', 2)
-    min = min || this.data.length.toString()
-    max = max || this.data.length.toString()
+    if (repeat.indexOf('..') === -1) {
+      const nth = parseInt(repeat, 10)
+      if (isNaN(nth)) {
+        throw new Error(`Invalid repeat number: ${repeat}`)
+      }
+    } else {
+      let [min, max] = repeat.split('..', 2)
+      min = min || this.data.length.toString()
+      max = max || this.data.length.toString()
 
-    const minValue = parseInt(min, 10)
-    const maxValue = parseInt(max, 10)
+      const minValue = parseInt(min, 10)
+      const maxValue = parseInt(max, 10)
 
-    if (isNaN(minValue) || isNaN(maxValue)) {
-      throw new Error(`Invalid repeat options: min(${min}) max(${max})`)
+      if (isNaN(minValue) || isNaN(maxValue)) {
+        throw new Error(`Invalid repeat options: min(${min}) max(${max})`)
+      }
     }
   }
 
@@ -519,6 +534,7 @@ class RulesHandler {
  * Incoming request context interface.
  *
  * @type {{
+ *  time: string,
  *  route: object,
  *  query: object,
  *  headers: object,
@@ -526,6 +542,7 @@ class RulesHandler {
  * }}
  */
 const RequestContextObject = {
+  time: '0000000000',
   route: {
     username: 'lexndru'
   },
