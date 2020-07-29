@@ -34,24 +34,38 @@ describe('Lookup fields in objects and return associated values', () => {
       bool: true,
       year: 2020,
       text: 'samplest'
-    }
+    },
+    array1: ['samplest', 'api', 'mockup'],
+    array2: [
+      {
+        id: 101
+      },
+      {
+        id: 102
+      },
+      {
+        id: 103
+      }
+    ]
   }
 
   it('should return null if field does not exist', async () => {
-    const value = lookup(testObject, 'something', 'x')
+    const value = lookup(testObject, ['something', 'x'])
     assert.strict.equal(value, null)
   })
 
   it('should return correct unicode value if field exist', async () => {
-    assert.strict.equal(lookup(testObject, 'something', 'a'), 'așteaptă')
-    assert.strict.equal(lookup(testObject, 'something', 'b'), 'bicicletă')
-    assert.strict.equal(lookup(testObject, 'something', 'c'), 'copyright ©')
+    assert.strict.deepEqual(lookup(testObject, ['something', 'a']), 'așteaptă')
+    assert.strict.deepEqual(lookup(testObject, ['something', 'b']), 'bicicletă')
+    assert.strict.deepEqual(lookup(testObject, ['something', 'c']), 'copyright ©')
   })
 
-  it('should return string representation of a value only', async () => {
-    assert.strict.equal(lookup(testObject, 'x', 'list'), '1,2,3')
-    assert.strict.equal(lookup(testObject, 'x', 'bool'), 'true')
-    assert.strict.equal(lookup(testObject, 'x', 'year'), '2020')
-    assert.strict.equal(lookup(testObject, 'x', 'text'), 'samplest')
+  it('should return appropriate representation of value only', async () => {
+    assert.strict.deepEqual(lookup(testObject, ['x', 'list']), [1, 2, 3])
+    assert.strict.deepEqual(lookup(testObject, ['x', 'bool']), true)
+    assert.strict.deepEqual(lookup(testObject, ['x', 'year']), 2020)
+    assert.strict.deepEqual(lookup(testObject, ['x', 'text']), 'samplest')
+    assert.strict.deepEqual(lookup(testObject, ['array1', '*']), ['samplest', 'api', 'mockup'])
+    assert.strict.deepEqual(lookup(testObject, ['array2', '*', 'id']), [101, 102, 103])
   })
 })

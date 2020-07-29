@@ -20,26 +20,75 @@
 'use strict'
 
 /**
- * Lookup and return the value of a field from an object.
+ * Wildcard char to lookup any item from a dataset.
  *
- * @param {any} heystack The object as heystack
- * @param {string[]} fields The needle to lookup
- * @returns {string|null}
+ * @type {string}
  */
-function lookup (heystack, ...fields) {
-  if (fields.length > 0) {
-    const key = fields.shift() || ''
-    if (key in heystack) {
-      const value = heystack[key]
-      if (typeof value === 'object' && value.constructor === Object) {
-        return lookup(value, ...fields)
-      } else {
-        return value.toString()
-      }
+const WILDCARD = '*'
+
+/**
+ * Cast given field(s) into a datatype of user choice from a source.
+ *
+ * @param {string} type The datatype to cast into
+ * @param {any} value The raw value to cast
+ * @returns {number|boolean|string}
+ */
+function cast (type, value) {
+  if (typeof value === 'undefined' || value === null) {
+    return `<can't cast "${value}" as ${type}>`
+  } else if (type === 'number') {
+    const num = parseInt(value.toString(), 10)
+    if (isNaN(num)) {
+      return `<"${value}" is not a number>`
     }
+    return num
+  } else if (type === 'boolean') {
+    if (value.toString().toLowerCase() === 'true') {
+      return true
+    } else if (value.toString().toLowerCase() === 'false') {
+      return false
+    } else {
+      return `<"${value}" is not a boolean>`
+    }
+  } else if (type === 'string') {
+    return value.toString()
   }
 
-  return null
+  throw new Error(`Unsupported cast type "${type}"`)
+}
+
+/**
+ * Lookup and return the value of a field from a heystack.
+ *
+ * @param {any} source Heystack source pool
+ * @param {string[]} fieldpath Needle to lookup
+ * @returns {any}
+ */
+function lookup (source, fieldpath) {
+  const field = fieldpath.shift()
+  if (field === undefined) {
+    return source
+  }
+
+  if (field === WILDCARD && Array.isArray(source)) {
+    const dataset = []
+    for (const each of source) {
+      const value = lookup(each, [...fieldpath])
+      if (value !== null) {
+        dataset.push(value)
+      }
+    }
+    return dataset
+  }
+
+  const results = source[field] || null // NOTE: avoid undefined
+  if (results === null) {
+    return null
+  } else if (results.constructor === Object || Array.isArray(results)) {
+    return lookup(results, fieldpath)
+  } else {
+    return results
+  }
 }
 
 /**
@@ -68,7 +117,7 @@ function * capture (content) {
 function interpret (text, ctx, lower = false) {
   for (const variable of capture(text)) {
     const needle = lower ? variable.toLowerCase() : variable
-    const value = lookup(ctx, ...needle.split('.'))
+    const value = lookup(ctx, needle.split('.'))
     if (value !== null) {
       text = text.replace(`{${variable}}`, value)
     }
@@ -106,74 +155,12 @@ function generateContent (data, tf = null) {
 }
 
 /**
- * Request Object Interface.
- *
- * @type {{
- *  route: string,
- *  method: string,
- *  query: object,
- *  payload: object,
- *  headers: object,
- *  $query: object,
- *  $payload: object,
- *  $headers: object
- * }}
+ * Base handler class, with basic validation methods for common fields
+ * on both requests and responses.
  */
-const RequestObject = {
-  route: 'endpoint with optional {placeholder(s)}',
-  method: 'get | post | put | delete',
-  query: {
-    param1: 'value or {placeholder}',
-    param2: ['value', '{placeholder}']
-  },
-  $query: {
-    param1: 'string | array | required',
-    param2: 'string | array | required'
-  },
-  payload: {
-    field1: 'value or {placeholder}',
-    field2: 'value or {placeholder}'
-  },
-  $payload: {
-    field1: 'string | number | boolean | array | object | required',
-    field2: 'string | number | boolean | array | object | required'
-  },
-  headers: {
-    'X-Some-Header1': 'value or {placeholder}',
-    'X-Some-Header2': 'value or {placeholder}'
-  },
-  $headers: {
-    'X-Some-Header1': 'required'
-  }
-}
-
-/**
- * Request object handler performs first-level validations for user errors
- * and extracts required fields to launch the API server (e.g. routes). It
- * also encapsulates all request-related content for later use by the REST
- * API generator.
- */
-class RequestHandler {
+class CommonHandler {
   /**
-   * Initialize request handler.
-   *
-   * @param {RequestObject} r The request object to handle
-   */
-  constructor ({
-    route, method, headers, query, payload, $headers, $query, $payload
-  }) {
-    this.route = this.validateHttpRoute(route)
-    this.method = this.validateHttpRouteMethod(method)
-    this.query = query
-    this.$query = $query
-    this.headers = this.validateHeaders(headers)
-    this.$headers = $headers
-    this.payload = this.validatePayload(payload)
-    this.$payload = $payload
-  }
-
-  /**
-   * Check if the request headers are correct.
+   * Check if the HTTP headers are correct.
    *
    * @param {object} headers The headers to validate
    * @throws {Error} Duplicated headers not allowed
@@ -195,20 +182,103 @@ class RequestHandler {
 
     return lowercaseHeaders
   }
+}
+
+/**
+ * Request Object Interface.
+ *
+ * @type {{
+ *  route: string,
+ *  method: string,
+ *  query: object,
+ *  payload: object,
+ *  headers: object,
+ * }}
+ */
+const RequestObject = {
+  route: 'endpoint with optional {placeholder(s)}',
+  method: 'head | get | post | put | patch | delete',
+  query: {
+    param1: 'value or {placeholder}',
+    param2: ['value', '{placeholder}']
+  },
+  payload: {
+    field1: 'value or {placeholder}',
+    field2: {
+      subfield: 'value or {placeholder}'
+    }
+  },
+  headers: {
+    'X-Some-Header1': 'value or {placeholder}',
+    'X-Some-Header2': 'value or {placeholder}'
+  }
+}
+
+/**
+ * Request object handler performs first-level validations for user errors
+ * and extracts required fields to launch the API server (e.g. routes). It
+ * also encapsulates all request-related content for later use by the REST
+ * API generator.
+ */
+class RequestHandler extends CommonHandler {
+  /**
+   * Initialize request handler.
+   *
+   * @param {RequestObject} r The request object to handle
+   */
+  constructor ({ route, method, headers, query, payload }) {
+    super()
+    this.route = this.validateHttpRoute(route)
+    this.method = this.validateHttpRouteMethod(method)
+    this.query = this.validateQueryString(query)
+    this.headers = this.validateHeaders(headers)
+    this.payload = this.validatePayload(payload)
+  }
 
   /**
-   * Check if the request payload has a correct format.
-   *
-   * @param {object} payload The payload to validate
-   * @throws {Error} Unsupported request payload as array
-   * @returns {object}
-   */
-  validatePayload (payload) {
-    if (payload && Array.isArray(payload)) {
-      throw new Error('Unsupported request payload as array')
+     * Check if the query string is valid.
+     *
+     * @param {object} query The query string to validate
+     * @throws {Error} Query string must be string or string[]
+     * @returns {object}
+     */
+  validateQueryString (query) {
+    if (query && typeof query === 'object' && query.constructor === Object) {
+      Object.entries(query).forEach(([key, value]) => {
+        if (!Array.isArray(value)) {
+          value = [value]
+        }
+        for (const each of value) {
+          if (each.toString() !== each) {
+            throw new Error(`Query string "${key}" must be string or string[]`)
+          }
+        }
+      })
+    } else {
+      throw new Error(`Request query must be object, got ${typeof query}`)
     }
 
-    return payload
+    return query
+  }
+
+  /**
+   * Check if the request payload has a correct format. It can either an
+   * object with key-value pairs of information submitted as JSON object
+   * or URL encoded equivalents; or a buffer submitted as string (base64
+   * preferred, but limited to).
+   *
+   * @param {object|string} payload The payload to validate
+   * @throws {Error} Request payload must be an object or a string
+   * @returns {object|string}
+   */
+  validatePayload (payload) {
+    if (typeof payload === 'object' && payload.constructor === Object) {
+      return payload
+    } else if (payload && payload.toString() === payload) {
+      return payload
+    }
+
+    throw new Error('Request payload must be an object or a string')
   }
 
   /**
@@ -234,11 +304,11 @@ class RequestHandler {
    * @returns {string}
    */
   validateHttpRouteMethod (method) {
-    if (RequestHandler.HTTP_VERBS.indexOf(method.toUpperCase()) === -1) {
+    if (RequestHandler.HTTP_VERBS.indexOf(method.toLowerCase()) === -1) {
       throw new Error(`Unsupported request HTTP method: ${method}`)
     }
 
-    return method
+    return method.toLowerCase()
   }
 
   /**
@@ -247,8 +317,24 @@ class RequestHandler {
    * @type {string[]}
    */
   static get HTTP_VERBS () {
-    return ['HEAD', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE']
+    return ['head', 'get', 'post', 'put', 'patch', 'delete']
   }
+}
+
+/**
+ * Response Metadata Object Interface.
+ *
+ * @type {{
+ *  cast: Record<string, string>,
+ *  repeat: string
+ * }}
+ */
+const ResponseMetadataObject = {
+  cast: {
+    id: 'number',
+    'books.*': 'number'
+  },
+  repeat: '..20'
 }
 
 /**
@@ -257,8 +343,8 @@ class RequestHandler {
  * @type {{
  *  code: string,
  *  headers: object,
- *  data: object|object[]|string,
- *  $data: object
+ *  data: object|object[]|string|string[],
+ *  $data: ResponseMetadataObject
  * }}
  */
 const ResponseObject = {
@@ -275,8 +361,10 @@ const ResponseObject = {
     ]
   },
   $data: {
-    id: 'number',
-    books: 'array repeat:20'
+    cast: {
+      'key from data': 'number | boolean | string (default)'
+    },
+    repeat: 'any positive number or [min..max]'
   }
 }
 
@@ -285,17 +373,91 @@ const ResponseObject = {
  * and evaluates placeholders used in "headers" or "data", according to the
  * metafield configuration ($data).
  */
-class ResponseHandler {
+class ResponseHandler extends CommonHandler {
   /**
    * Initialize response handler.
    *
    * @param {ResponseObject} r The response object to handle
    */
   constructor ({ code, headers, data, $data }) {
+    super()
     this.code = this.validateStatusCode(code)
-    this.headers = headers
-    this.data = data
-    this.$data = $data
+    this.headers = this.validateHeaders(headers)
+    this.data = data || null // NOTE: avoid undefined
+    this.$data = this.validateMetadata($data)
+  }
+
+  static get CAST_OPTIONS () {
+    return ['number', 'boolean', 'string']
+  }
+
+  /**
+   * Check if the metadata fields are supported.
+   *
+   * @param {ResponseMetadataObject} $data The metadata to validate
+   * @returns {object?}
+   */
+  validateMetadata ($data) {
+    if ($data && typeof $data === 'object' && $data.constructor === Object) {
+      const { cast, repeat } = $data
+      if (cast && typeof cast === 'object') {
+        this.validateMetadataCastTypes(cast)
+      } else if (typeof cast !== 'undefined') {
+        throw new Error('Cast must be a key-value object')
+      }
+      if (repeat && repeat.toString() === repeat) {
+        this.validateMetadataRepeatOptions(repeat)
+      } else if (typeof repeat !== 'undefined') {
+        throw new Error('Repeat must be a string')
+      }
+    }
+
+    return $data
+  }
+
+  /**
+   * Helper method to validate metadata repeat options.
+   *
+   * @param {string} repeat The repeat formula as string
+   * @throws {Error} Cannot use meta repeat on a non-array data
+   * @throws {Error} Invalid repeat options: min(MIN) max(MAX)
+   * @returns void
+   */
+  validateMetadataRepeatOptions (repeat) {
+    if (!Array.isArray(this.data)) {
+      throw new Error('Cannot use meta repeat on a non-array data')
+    }
+
+    let [min, max] = repeat.split('..', 2)
+    min = min || this.data.length.toString()
+    max = max || this.data.length.toString()
+
+    const minValue = parseInt(min, 10)
+    const maxValue = parseInt(max, 10)
+
+    if (isNaN(minValue) || isNaN(maxValue)) {
+      throw new Error(`Invalid repeat options: min(${min}) max(${max})`)
+    }
+  }
+
+  /**
+   * Helper method to validate metadata cast types.
+   *
+   * @param {Record<string, string>} cast Key-value pairs of properties
+   * @throws {Error} Nothing to cast
+   * @throws {Error} Unsupported cast type
+   * @returns void
+   */
+  validateMetadataCastTypes (cast) {
+    Object.keys(cast).forEach(key => {
+      const value = lookup(this.data, key.split('.'))
+      if (value === null) {
+        throw new Error(`Nothing to cast on ${key}`)
+      }
+      if (ResponseHandler.CAST_OPTIONS.indexOf(cast[key]) === -1) {
+        throw new Error(`Unsupported cast type: ${cast[key]}`)
+      }
+    })
   }
 
   /**
@@ -382,6 +544,7 @@ const RequestContextObject = {
 }
 
 module.exports = {
+  cast,
   generateContent,
   capture,
   interpret,
@@ -390,6 +553,7 @@ module.exports = {
   RequestHandler,
   RequestContextObject,
   ResponseObject,
+  ResponseMetadataObject,
   ResponseHandler,
   RulesObject,
   RulesHandler

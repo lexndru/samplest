@@ -100,4 +100,29 @@ describe('Validate request rules', () => {
       new RequestHandler(requestObject)
     })
   })
+
+  it('should fail if query string is not string or string[]', () => {
+    requestObject.method = 'get'
+    requestObject.route = '/'
+    requestObject.headers = {}
+    requestObject.query = {
+      param1: 'test',
+      param2: ['test 2']
+    }
+
+    assert.doesNotThrow(() => {
+      new RequestHandler(requestObject)
+    })
+
+    requestObject.query = {
+      param1: true,
+      param2: {
+        x: 1
+      }
+    }
+
+    assert.throws(() => {
+      new RequestHandler(requestObject)
+    })
+  })
 })
