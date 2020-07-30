@@ -20,7 +20,7 @@
 
 const assert = require('assert')
 
-const { capture } = require('../samplest')
+const { capture } = require('../lib')
 
 describe('Capture placeholders from a string', () => {
   it('should extract all words between curly brackets', async () => {

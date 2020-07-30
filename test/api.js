@@ -20,57 +20,9 @@
 
 const assert = require('assert')
 
-const { ResponseHandler } = require('../lib')
+const { ContentBuilder } = require('../api')
 
-describe('Validate response rules', () => {
-  it('should fail if status code is invalid', () => {
-    const responseObject = {
-      code: 0,
-      headers: {},
-      data: null
-    }
+describe('Test response for a known sample and a mockup request', () => {
 
-    assert.throws(() => {
-      new ResponseHandler(responseObject)
-    })
-
-    responseObject.code = 200
-    assert.doesNotThrow(() => {
-      const res = new ResponseHandler(responseObject)
-      if (res.code !== responseObject.code) {
-        assert.fail('Status code mismatch')
-      }
-    })
-  })
-
-  it('should fail if metadata has options invalid for data', () => {
-    const responseObject = {
-      code: 200,
-      data: 'this is a string',
-      $data: {
-        cast: {
-          '*': 'number'
-        }
-      }
-    }
-
-    assert.throws(() => {
-      new ResponseHandler(responseObject)
-    })
-
-    const responseObject2 = {
-      code: 200,
-      data: ['1', '2', '3'],
-      $data: {
-        cast: {
-          '*': 'number'
-        },
-        repeat: '10..20'
-      }
-    }
-
-    assert.doesNotThrow(() => {
-      new ResponseHandler(responseObject2)
-    })
-  })
+  // ...
 })

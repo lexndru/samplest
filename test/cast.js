@@ -20,9 +20,35 @@
 
 const assert = require('assert')
 
-const { RulesHandler } = require('../samplest')
+const { castContent } = require('../lib')
 
-describe('Validate request-response rules', () => {
+describe('Cast from string to other numbers and booleans', () => {
+  const testObject = {
+    id: '100',
+    success: 'true'
+  }
 
-  // ...
+  it('should return the appropriate values after casting', () => {
+    const num = castContent('number', testObject.id)
+    assert.strict.equal(num, 100)
+
+    const bool = castContent('boolean', testObject.success)
+    assert.strict.equal(bool, true)
+  })
+
+  it('should return failure reason in text format', () => {
+    const num = castContent('boolean', testObject.id)
+    assert.strict.equal(num, '<"100" is not a boolean>')
+
+    const bool = castContent('number', testObject.success)
+    assert.strict.equal(bool, '<"true" is not a number>')
+  })
+
+  it('should throw an error if cast type is unsupported', () => {
+    assert.throws(() => {
+      castContent('xxxxxxx', {})
+    })
+
+    assert.strict.equal(castContent('string', null), '<cannot cast "null" as string>')
+  })
 })

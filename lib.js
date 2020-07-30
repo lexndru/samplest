@@ -27,71 +27,6 @@
 const WILDCARD = '*'
 
 /**
- * Cast given field(s) into a datatype of user choice from a source.
- *
- * @param {string} type The datatype to cast into
- * @param {any} value The raw value to cast
- * @returns {number|boolean|string}
- */
-function cast (type, value) {
-  if (typeof value === 'undefined' || value === null) {
-    return `<can't cast "${value}" as ${type}>`
-  } else if (type === 'number') {
-    const num = parseInt(value.toString(), 10)
-    if (isNaN(num)) {
-      return `<"${value}" is not a number>`
-    }
-    return num
-  } else if (type === 'boolean') {
-    if (value.toString().toLowerCase() === 'true') {
-      return true
-    } else if (value.toString().toLowerCase() === 'false') {
-      return false
-    } else {
-      return `<"${value}" is not a boolean>`
-    }
-  } else if (type === 'string') {
-    return value.toString()
-  }
-
-  throw new Error(`Unsupported cast type "${type}"`)
-}
-
-/**
- * Lookup and return the value of a field from a heystack.
- *
- * @param {any} source Heystack source pool
- * @param {string[]} fieldpath Needle to lookup
- * @returns {any}
- */
-function lookup (source, fieldpath) {
-  const field = fieldpath.shift()
-  if (field === undefined) {
-    return source
-  }
-
-  if (field === WILDCARD && Array.isArray(source)) {
-    const dataset = []
-    for (const each of source) {
-      const value = lookup(each, [...fieldpath])
-      if (value !== null) {
-        dataset.push(value)
-      }
-    }
-    return dataset
-  }
-
-  const results = source[field] || null // NOTE: avoid undefined
-  if (results === null) {
-    return null
-  } else if (results.constructor === Object || Array.isArray(results)) {
-    return lookup(results, fieldpath)
-  } else {
-    return results
-  }
-}
-
-/**
  * Capture all placeholders from content.
  *
  * @param {string} content The content to parse
@@ -115,9 +50,10 @@ function * capture (content) {
  * @returns {string}
  */
 function interpret (text, ctx, lower = false) {
+  const cm = new ContextManager(ctx)
   for (const variable of capture(text)) {
     const needle = lower ? variable.toLowerCase() : variable
-    const value = lookup(ctx, needle.split('.'))
+    const value = cm.get(needle)
     if (value !== null) {
       text = text.replace(`{${variable}}`, value)
     }
@@ -152,6 +88,162 @@ function generateContent (data, tf = null) {
   const textContent = content.toString()
 
   return tf instanceof Function ? tf(textContent) : textContent
+}
+
+/**
+ * Repeat the elements of a list by a fixed or random number from a range.
+ *
+ * @param {any[]} list Anything iterable
+ * @param {string} formula Repeat formula to apply
+ * @return {any[]}
+ */
+function repeatContent (list, formula) {
+  let total
+
+  if (formula.indexOf('..') > -1) {
+    const [min, max] = formula.split('..', 2)
+    const minValue = parseInt(min, 10) || list.length
+    const maxValue = parseInt(max, 10) || list.length
+    total = Math.floor(Math.random() * (maxValue - minValue + 1) + minValue)
+  } else {
+    total = parseInt(formula.toString(), 10)
+  }
+
+  const stack = new Array()
+  for (let i = 0; i < total; i++) {
+    stack.push(list)
+  }
+
+  return [].concat(...stack)
+}
+
+/**
+ * Cast given field(s) into a datatype of user choice from a source.
+ *
+ * @param {string} type The datatype to cast into
+ * @param {any} value The raw value to cast
+ * @returns {number|boolean|string}
+ */
+function castContent (type, value) {
+  if (typeof value === 'undefined' || value === null) {
+    return `<cannot cast "${value}" as ${type}>`
+  } else if (type === 'number') {
+    const num = Number(value.toString())
+    if (isNaN(num)) {
+      return `<"${value}" is not a number>`
+    }
+    return num
+  } else if (type === 'boolean') {
+    if (value.toString().toLowerCase() === 'true') {
+      return true
+    } else if (value.toString().toLowerCase() === 'false') {
+      return false
+    } else {
+      return `<"${value}" is not a boolean>`
+    }
+  } else if (type === 'string') {
+    return value.toString()
+  }
+
+  throw new Error(`Unsupported cast type "${type}"`)
+}
+
+/**
+ * The context manager is responsable to retrieve and change any existing or
+ * non-existing information from a source of the user's choice. It is mostly
+ * used by the content generator/interpretor.
+ */
+class ContextManager {
+  /**
+   * Initialize context manager.
+   *
+   * @param {object} src Source as context to manage
+   */
+  constructor (src) {
+    this.ctx = src
+  }
+
+  /**
+   * Shorthand method to get the content of a field.
+   *
+   * @param {string} field
+   * @returns {any}
+   */
+  get (field) {
+    return ContextManager.read(this.ctx, field.split('.'))
+  }
+
+  /**
+   * Shorthand method to set the content for a field.
+   *
+   * @param {string} field
+   * @param {any} data
+   * @returns void
+   */
+  set (field, data) {
+    ContextManager.write(this.ctx, field.split('.'), data)
+  }
+
+  /**
+   * Lookup and retrieve the value of a field from a heystack.
+   *
+   * @param {any} source Heystack source pool
+   * @param {string[]} fieldpath Needle to lookup
+   * @returns {any}
+   */
+  static read (source, fieldpath) {
+    const field = fieldpath.shift()
+    if (field === undefined) {
+      return source
+    }
+
+    if (field === WILDCARD && Array.isArray(source)) {
+      const dataset = []
+      for (const each of source) {
+        const value = this.read(each, [...fieldpath])
+        if (value !== null) {
+          dataset.push(value)
+        }
+      }
+      return dataset
+    }
+
+    const results = source[field] || null // NOTE: avoid undefined
+    if (results === null) {
+      return null
+    } else if (results.constructor === Object || Array.isArray(results)) {
+      return this.read(results, fieldpath)
+    } else {
+      return results
+    }
+  }
+
+  /**
+   * Lookup and store the value of a field on a heystack.
+   *
+   * @param {any} source Heystack source
+   * @param {string[]} fieldpath Needle to lookup
+   * @param {CallableFunction} content Content callback
+   * @returns any
+   */
+  static write (source, fieldpath, content) {
+    const field = fieldpath.shift()
+    if (field === undefined) {
+      return content(source)
+    } else {
+      if (field === WILDCARD && Array.isArray(source)) {
+        for (let i = 0; i < source.length; i++) {
+          source[i] = this.write(source[i], [...fieldpath], content)
+        }
+      } else if (field in source) {
+        source[field] = this.write(source[field], fieldpath, content)
+      } else {
+        source[field] = content(undefined)
+      }
+    }
+
+    return source
+  }
 }
 
 /**
@@ -226,22 +318,22 @@ class RequestHandler extends CommonHandler {
    *
    * @param {RequestObject} r The request object to handle
    */
-  constructor ({ route, method, headers, query, payload }) {
+  constructor ({ method, route, headers, query, payload }) {
     super()
-    this.route = this.validateHttpRoute(route)
     this.method = this.validateHttpRouteMethod(method)
+    this.route = this.validateHttpRoute(route)
     this.query = this.validateQueryString(query)
     this.headers = this.validateHeaders(headers)
     this.payload = this.validatePayload(payload)
   }
 
   /**
-     * Check if the query string is valid.
-     *
-     * @param {object} query The query string to validate
-     * @throws {Error} Query string must be string or string[]
-     * @returns {object?}
-     */
+   * Check if the query string is valid.
+   *
+   * @param {object} query The query string to validate
+   * @throws {Error} Query string must be string or string[]
+   * @returns {object?}
+   */
   validateQueryString (query) {
     if (query === undefined) {
       return {}
@@ -352,7 +444,7 @@ const ResponseMetadataObject = {
  *  code: string,
  *  headers: object,
  *  data: object|object[]|string|string[],
- *  $data: ResponseMetadataObject
+ *  $data: ResponseMetadataObject?
  * }}
  */
 const ResponseObject = {
@@ -392,7 +484,7 @@ class ResponseHandler extends CommonHandler {
     this.code = this.validateStatusCode(code)
     this.headers = this.validateHeaders(headers)
     this.data = data || null // NOTE: avoid undefined
-    this.$data = this.validateMetadata($data)
+    this.$data = $data && this.validateMetadata($data)
   }
 
   static get CAST_OPTIONS () {
@@ -464,8 +556,12 @@ class ResponseHandler extends CommonHandler {
    * @returns void
    */
   validateMetadataCastTypes (cast) {
+    if (this.data === null || typeof this.data !== 'object') {
+      throw new Error('Casting works only with response data objects')
+    }
+    const ctx = new ContextManager(this.data)
     Object.keys(cast).forEach(key => {
-      const value = lookup(this.data, key.split('.'))
+      const value = ctx.get(key)
       if (value === null) {
         throw new Error(`Nothing to cast on ${key}`)
       }
@@ -496,35 +592,64 @@ class ResponseHandler extends CommonHandler {
 }
 
 /**
- * Rules Object Interface.
+ * Except Case Object Interface.
  *
- * @type {Record<string, string[]>}
+ * @type {{
+ *  test: string[],
+ *  response: ResponseObject
+ * }}
  */
-const RulesObject = {
-  'Assert message goes here': [
-    'first function body to test',
-    'second function body to test'
+const ExceptCaseObject = {
+  test: [
+    'js code as one line of string',
+    'js code as one line of string'
   ],
-  'Client must implement samplest request!': [
-    'route.length > 0',
-    "typeof payload.id !== 'undefined'",
-    "headers['X-Custom-Field'] === 'encoded.secret'"
-  ]
+  response: {
+    code: 'number',
+    headers: {
+      'X-Header': 'string'
+    },
+    data: 'string | string[] | object | object[]',
+    $data: null
+  }
 }
 
 /**
- * Rules object handler (optional middleware) performs custom validation rules
- * as provided by the user. Upon failure, the API always returns a Bad Request
- * response with the assertion message.
+ * Except Object Interface.
+ *
+ * @type {Record<string, ExceptCaseObject>}
  */
-class RulesHandler {
+const ExceptObject = {
+  'Assert message goes here': {
+    test: [
+      'first function body to test',
+      'second function body to test'
+    ],
+    response: {
+      code: '400',
+      headers: {
+        'X-Reject-Reason': 'Exception rule failure'
+      },
+      data: 'feedback message',
+      $data: null
+    }
+  }
+}
+
+/**
+ * Except object handler (optional middleware) performs custom tests as one
+ * lines of JavaScript code, isolated from the rest of the application with
+ * only the current context available to use as parameters. Upon failure it
+ * overrides the response with the current exception's case.
+ */
+class ExceptHandler {
   /**
    * Initialize rules handler.
    *
-   * @param {RulesObject} rules The rules object to handle
+   * @param {ExceptObject} except The exceptions to handle
    */
-  constructor (rules) {
-    this.rules = rules
+  constructor (except) {
+    this.except = except
   }
 
   // TODO: Implement Function() evaluator to assert validation rules...
@@ -561,17 +686,18 @@ const RequestContextObject = {
 }
 
 module.exports = {
-  cast,
+  castContent,
+  repeatContent,
   generateContent,
   capture,
   interpret,
-  lookup,
+  ContextManager,
   RequestObject,
   RequestHandler,
   RequestContextObject,
   ResponseObject,
   ResponseMetadataObject,
   ResponseHandler,
-  RulesObject,
-  RulesHandler
+  ExceptObject,
+  ExceptHandler
 }

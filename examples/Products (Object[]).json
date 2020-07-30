@@ -29,7 +29,12 @@
 		    }
                 ],
 		"$data": {
-			"repeat": "..10"
+			"repeat": "..10",
+                        "cast": {
+                            "*.id": "number",
+			    "*.price": "number",
+                            "*.related.*.id": "number"
+                        }
 		}
 	}
 }

@@ -13,7 +13,8 @@
 		},
                 "$data": {
                     "cast": {
-                        "id": "number"
+                        "id": "number",
+                        "price": "number"
                     }
                 }
 

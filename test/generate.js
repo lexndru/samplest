@@ -21,7 +21,7 @@
 const assert = require('assert')
 
 const { fake } = require('faker')
-const { generateContent, interpret } = require('../samplest')
+const { generateContent, interpret } = require('../lib')
 
 describe('Generate content to reflect the data type request', () => {
   it('should generate an array of strings and the last item as object', () => {
@@ -72,6 +72,7 @@ describe('Generate content as string, string[], object, object[]', () => {
       '{lines.2} line generated',
       '{lines.3} line generated'
     ])
+
     const expect = [
         `${testObject.lines['1']} line generated`,
         `${testObject.lines['2']} line generated`,
@@ -112,6 +113,7 @@ describe('Generate content as string, string[], object, object[]', () => {
     }
 
     const result = generateContent(data, (str) => interpret(str, testObject))
+
     assert.strict.equal(JSON.stringify(result), JSON.stringify(expected))
   })
 

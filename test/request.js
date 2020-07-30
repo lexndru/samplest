@@ -20,7 +20,7 @@
 
 const assert = require('assert')
 
-const { RequestHandler } = require('../samplest')
+const { RequestHandler } = require('../lib')
 
 describe('Validate request rules', () => {
   const requestObject = {

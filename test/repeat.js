@@ -20,57 +20,38 @@
 
 const assert = require('assert')
 
-const { ResponseHandler } = require('../lib')
+const { repeatContent } = require('../lib')
 
-describe('Validate response rules', () => {
-  it('should fail if status code is invalid', () => {
-    const responseObject = {
-      code: 0,
-      headers: {},
-      data: null
-    }
-
-    assert.throws(() => {
-      new ResponseHandler(responseObject)
-    })
-
-    responseObject.code = 200
-    assert.doesNotThrow(() => {
-      const res = new ResponseHandler(responseObject)
-      if (res.code !== responseObject.code) {
-        assert.fail('Status code mismatch')
+describe('Repeat existing elements from a list', () => {
+  it('should return exactly N elements', () => {
+    const testList = [
+      {
+        a: 1
+      },
+      {
+        b: 2
+      },
+      {
+        c: 3
       }
-    })
+    ]
+    const totalElements = testList.length
+    const repeatTimes = 10
+    const expectedElements = repeatTimes * totalElements
+
+    const newList = repeatContent(testList, repeatTimes.toString())
+
+    assert.strict.equal(newList.length, expectedElements)
   })
 
-  it('should fail if metadata has options invalid for data', () => {
-    const responseObject = {
-      code: 200,
-      data: 'this is a string',
-      $data: {
-        cast: {
-          '*': 'number'
-        }
-      }
+  it('should return random number of elements from a range', () => {
+    const testList = [1]
+    const repeatFormula = '5..10'
+
+    const newList = repeatContent(testList, repeatFormula)
+
+    if (newList.length < 5 || newList.length > 10) {
+      assert.fail(`Expected length between 5 and 10, but got ${newList.length}`)
     }
-
-    assert.throws(() => {
-      new ResponseHandler(responseObject)
-    })
-
-    const responseObject2 = {
-      code: 200,
-      data: ['1', '2', '3'],
-      $data: {
-        cast: {
-          '*': 'number'
-        },
-        repeat: '10..20'
-      }
-    }
-
-    assert.doesNotThrow(() => {
-      new ResponseHandler(responseObject2)
-    })
   })
 })

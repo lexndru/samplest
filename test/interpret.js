@@ -20,7 +20,7 @@
 
 const assert = require('assert')
 
-const { interpret } = require('../samplest')
+const { interpret } = require('../lib')
 
 describe('Interpret a given string to generate content from context', () => {
   const context = {

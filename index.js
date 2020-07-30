@@ -23,7 +23,7 @@
 const { readFileSync } = require('fs')
 const { join } = require('path')
 
-const { bootstrap } = require('./utils')
+const { serve } = require('./api')
 
 const { ArgumentParser } = require('argparse')
 
@@ -64,7 +64,7 @@ cmd.addArgument(['-d', '--dump'], {
 // Please open a ticket on github if you want to contribute.
 !(async (args) => {
   if (args.dir !== null) {
-    await bootstrap(args.dir, host, port)
+    await serve(args.dir, host, port)
   } else if (args.support !== null) {
     // TODO: display a list of supported generators?
   } else if (args.dump !== null) {
