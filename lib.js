@@ -419,6 +419,15 @@ class RequestHandler extends CommonHandler {
   static get HTTP_VERBS () {
     return ['head', 'get', 'post', 'put', 'patch', 'delete']
   }
+
+  /**
+   * String representation of RequestHandler instance.
+   *
+   * @returns {string}
+   */
+  toString () {
+    return `${this.method.toUpperCase()} ${this.route}`
+  }
 }
 
 /**
@@ -588,6 +597,15 @@ class ResponseHandler extends CommonHandler {
     }
 
     return code
+  }
+
+  /**
+   * String representation of ResponseHandler instance.
+   *
+   * @return {string}
+   */
+  toString () {
+    return `${this.code}`
   }
 }
 

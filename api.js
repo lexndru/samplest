@@ -19,8 +19,7 @@
 // SOFTWARE.
 'use strict'
 
-const { readFile, readdir } = require('fs')
-const { join } = require('path')
+const { fake } = require('faker')
 
 const {
   castContent,
@@ -35,48 +34,20 @@ const {
   ResponseObject
 } = require('./lib')
 
-const { fake } = require('faker')
-const Express = require('express')
-const Body = require('body-parser')
-
 /**
- * Read a file asynchrounously and return its content as string.
+ * Register an HTTP call to an HTTP handler.
  *
- * @param {string} fp The absolute file path
- * @returns {Promise<string>} The content of the file
+ * @param {ContentBuilder} builder Instance of content builder
+ * @param {any} api Instance of initialized API
+ * @return void
  */
-function getFileContent (fp) {
-  return new Promise((resolve, reject) => {
-    readFile(fp, 'utf8', (err, data) => err ? reject(err) : resolve(data))
+function registerHttpCall (builder, api) {
+  api[builder.request.method](builder.request.route, (req, res) => {
+    const { code, headers, content } = builder.refreshContent(req)
+    const datetime = new Date().toISOString()
+    console.log(`${datetime} - ${req.method} ${req.originalUrl} (${code})`)
+    res.set(headers).status(code).json(content)
   })
-}
-
-/**
- * Iterate over a directory and retrieve a list of files.
- *
- * @param {string} dir The directory to scan
- * @returns {Promise<string[]>} List of files
- */
-function getFilesFromDirectory (dir) {
-  return new Promise((resolve, reject) => {
-    readdir(dir, (err, data) => err ? reject(err) : resolve(data))
-  })
-}
-
-/**
- * Scan a directory for JSON files and pair each file with its content.
- *
- * @param {string} dirpath The directory path
- * @returns {AsyncGenerator}
- */
-async function * scanDirectory (dirpath) {
-  const files = await getFilesFromDirectory(dirpath)
-  for (const file of files) {
-    if (file.endsWith('.json')) {
-      const content = await getFileContent(join(dirpath, file))
-      yield [file, JSON.parse(content)]
-    }
-  }
 }
 
 /**
@@ -190,20 +161,15 @@ class ContentBuilder {
    * @returns {Record<string, string>}
    */
   processHeaders (rawHeaders, ctx) {
-    const headers = {
-      'X-Powered-By': 'samplest',
-      'X-Uptime': `${new Date().getTime() - this.startTime} seconds`
-    }
-
     /**
      * @param {string} text
      */
     const fn = (text) => interpret(fake(text), ctx, true)
     if (rawHeaders) {
-      Object.assign(headers, generateContent(rawHeaders, fn))
+      return generateContent(rawHeaders, fn)
     }
 
-    return headers
+    return {}
   }
 
   /**
@@ -246,33 +212,4 @@ class ContentBuilder {
   }
 }
 
-/**
- * Start a development API from samplests.
- *
- * @param {string} dir The path to directory
- * @param {string} host The hostname to bind
- * @param {string} port The port to listen
- * @returns {Promise<void>}
- */
-async function serve (dir, host, port) {
-  const api = Express()
-  api.use(Body.json())
-  api.use(Body.urlencoded({ extended: true }))
-  api.use(Body.text())
-
-  for await (const [file, content] of scanDirectory(dir)) {
-    const cb = new ContentBuilder(content)
-    api[cb.request.method](cb.request.route, (req, res) => {
-      const { code, headers, content } = cb.refreshContent(req)
-      console.log(`${new Date()}\n${req.method} ${req.originalUrl} ${code}`)
-      res.set(headers).status(code).json(content)
-    })
-    console.log(`${cb.request.method} ${cb.request.route} (file: ${file})`)
-  }
-
-  api.listen(port, host, () => {
-    console.log(`\n(up and running @ http://${host}:${port})\n`)
-  })
-}
-
-module.exports = { serve, ContentBuilder }
+module.exports = { registerHttpCall, ContentBuilder }
