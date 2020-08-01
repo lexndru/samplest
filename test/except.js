@@ -23,6 +23,55 @@ const assert = require('assert')
 const { ExceptHandler } = require('../lib')
 
 describe('Validate request-response exception cases', () => {
+  it('should throw errors for non-objects except cases', () => {
+    assert.throws(() => {
+      new ExceptHandler({
+        '#': {}
+      })
+    })
 
-  // ...
+    assert.throws(() => {
+      new ExceptHandler({
+        '#': {
+          validate: []
+        }
+      })
+    })
+
+    assert.throws(() => {
+      new ExceptHandler({
+        '#': {
+          validate: [],
+          response: {}
+        }
+      })
+    })
+
+    assert.throws(() => {
+      new ExceptHandler({
+        '#': {
+          validate: [],
+          response: { code: 200, data: 'ok' }
+        }
+      })
+    })
+  })
+
+  it('should pass for properly formatted except cases', () => {
+    const testObject = {
+      'assertion message': {
+        validate: [
+          'something to validate'
+        ],
+        response: {
+          code: 201,
+          data: 'test'
+        }
+      }
+    }
+
+    assert.doesNotThrow(() => {
+      new ExceptHandler(testObject)
+    })
+  })
 })

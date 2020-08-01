@@ -1,0 +1,26 @@
+{
+    "request": {
+        "route": "/api/v1/book/:book",
+        "method": "delete",
+        "headers": {
+            "x-secret": "secret code from phone"
+        }
+    },
+    "response": {
+        "code": 200,
+        "data": {
+            "message": "Successfully deleted {route.book} from system"
+        }
+    },
+    "except": {
+        "Secret code must be sent in headers": {
+            "validate": [
+                "headers['x-secret'] === 'samplest_' + route.book"
+            ],
+            "response": {
+                "code": 403,
+                "data": "I can't let you do that :)"
+            }
+        }
+    }
+}

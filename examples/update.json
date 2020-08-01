@@ -1,0 +1,48 @@
+{
+    "request": {
+        "route": "/api/v1/book/:book",
+        "method": "put",
+        "payload": {
+            "title": "The return of the king",
+            "author": "J. R. R. Tolkien"
+        }
+    },
+    "response": {
+        "code": 200,
+        "data": {
+            "message": "Successfully updated book #${route.book}",
+            "columns": {
+                "title": "{payload.title}",
+                "author": "{payload.author}",
+                "id": "{route.book}"
+            }
+        },
+        "$data": {
+            "cast": {
+                "columns.id": "number"
+            }
+        }
+    },
+    "except": {
+        "Book ID must be a number above 100": {
+            "validate": [
+                "Number(route.book) > 100"
+            ],
+            "response": {
+                "code": 404,
+                "data": {
+                    "message": "Book {route.book} not found"
+                }
+            }
+        },
+        "Book title must be different from original": {
+            "validate": [
+                "payload.title.toLowerCase() !== 'the return of the king'"
+            ],
+            "response": {
+                "code": 201,
+                "data": "Book has the same title. No action taken"
+            }
+        }
+    }
+}

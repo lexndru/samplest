@@ -33,6 +33,17 @@ const { registerHttpCall, ContentBuilder } = require('./api')
 const { RequestObject, ResponseObject } = require('./lib')
 
 /**
+ * General available style for CLI output.
+ *
+ * @type {object}
+ */
+const CLI_STYLE = {
+  style: {
+    head: ['reset']
+  }
+}
+
+/**
  * Iterate over a directory and retrieve a list of files.
  *
  * @param {string} dir The directory to scan
@@ -97,11 +108,16 @@ async function serve (dir, host, port) {
   api.use(BodyParser.urlencoded({ extended: true }))
   api.use(BodyParser.text())
 
-  const overviewTable = new Table()
+  const overviewTable = new Table(CLI_STYLE)
   try {
     for await (const [file, content] of scanDirectory(dir)) {
       const cb = new ContentBuilder(content)
-      registerHttpCall(cb, api)
+      registerHttpCall(cb, api, (date, { flow, code }, req) => {
+        const entry = date.toISOString()
+        const { method, originalUrl } = req
+        flow = flow || 'Happy path'
+        console.log(`${entry} - ${method} ${originalUrl} (${code}; ${flow})`)
+      })
       overviewTable.push({ [file]: `${cb.request}` })
     }
   } catch (e) {
@@ -116,11 +132,11 @@ async function serve (dir, host, port) {
 
   api.listen(port, host, () => {
     console.log(`Samplest v${version} is up and running`)
-    console.log(`Homepage: ${homepage}`)
     console.log(` Address: http://${host}:${port}`)
     console.log(`  Launch: ${new Date()}`)
+    console.log(`Homepage: ${homepage}`)
     console.log(`Overview: ${overviewTable.length} file(s) imported`)
-    console.log(`${overviewTable}\n`)
+    console.log(`\n${overviewTable}\n`)
   })
 }
 
@@ -157,7 +173,7 @@ function listSupportedPlaceholders (lookup) {
     supported = supported.filter(value => value === lookup)
   }
 
-  const supportTable = new Table()
+  const supportTable = new Table(CLI_STYLE)
   for (const item of supported) {
     const mockup = faker[item]
     for (const option of Object.keys(mockup)) {

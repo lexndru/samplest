@@ -1,0 +1,15 @@
+{
+    "request": {
+        "route": "/api/v1/persons",
+        "method": "get" 
+    },
+    "response": {
+        "code": 200,
+        "data": [
+            "My name is {{name.firstName}} {{name.lastName}}",
+            "I work as a {{name.jobTitle}}",
+            "My brother {{name.firstName}} works as a {{name.jobTitle}}",
+            "And my sister {{name.firstName}} works as a {{name.jobTitle}}"
+        ]
+    }
+}

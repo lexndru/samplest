@@ -187,6 +187,9 @@ class ContextManager {
   /**
    * Lookup and retrieve the value of a field from a heystack.
    *
+   * NOTE: *this* in static methods is not the reference variable,
+   *       but instead it's the class itself...
+   *
    * @param {any} source Heystack source pool
    * @param {string[]} fieldpath Needle to lookup
    * @returns {any}
@@ -220,6 +223,9 @@ class ContextManager {
 
   /**
    * Lookup and store the value of a field on a heystack.
+   *
+   * NOTE: *this* in static methods is not the reference variable,
+   *       but instead it's the class itself...
    *
    * @param {any} source Heystack source
    * @param {string[]} fieldpath Needle to lookup
@@ -258,7 +264,7 @@ class CommonHandler {
    * @throws {Error} Duplicated headers not allowed
    * @returns {object?}
    */
-  validateHeaders (headers) {
+  _validateHeaders (headers) {
     if (headers === undefined) {
       return {}
     }
@@ -320,11 +326,11 @@ class RequestHandler extends CommonHandler {
    */
   constructor ({ method, route, headers, query, payload }) {
     super()
-    this.method = this.validateHttpRouteMethod(method)
-    this.route = this.validateHttpRoute(route)
-    this.query = this.validateQueryString(query)
-    this.headers = this.validateHeaders(headers)
-    this.payload = this.validatePayload(payload)
+    this.method = this._validateHttpRouteMethod(method)
+    this.route = this._validateHttpRoute(route)
+    this.query = this._validateQueryString(query)
+    this.headers = this._validateHeaders(headers)
+    this.payload = this._validatePayload(payload)
   }
 
   /**
@@ -334,7 +340,7 @@ class RequestHandler extends CommonHandler {
    * @throws {Error} Query string must be string or string[]
    * @returns {object?}
    */
-  validateQueryString (query) {
+  _validateQueryString (query) {
     if (query === undefined) {
       return {}
     }
@@ -367,7 +373,7 @@ class RequestHandler extends CommonHandler {
    * @throws {Error} Request payload must be an object or a string
    * @returns {object|string|null}
    */
-  validatePayload (payload) {
+  _validatePayload (payload) {
     if (payload === undefined) {
       return null
     }
@@ -388,7 +394,7 @@ class RequestHandler extends CommonHandler {
    * @throws {Error} Request route must be a non-empty string
    * @returns {string}
    */
-  validateHttpRoute (route) {
+  _validateHttpRoute (route) {
     if (!route || route.trim().length === 0) {
       throw new Error('Request route must be a non-empty string')
     }
@@ -403,7 +409,7 @@ class RequestHandler extends CommonHandler {
    * @throws {Error} Unsupported HTTP method
    * @returns {string}
    */
-  validateHttpRouteMethod (method) {
+  _validateHttpRouteMethod (method) {
     if (RequestHandler.HTTP_VERBS.indexOf(method.toLowerCase()) === -1) {
       throw new Error(`Unsupported request HTTP method: ${method}`)
     }
@@ -490,12 +496,17 @@ class ResponseHandler extends CommonHandler {
    */
   constructor ({ code, headers, data, $data }) {
     super()
-    this.code = this.validateStatusCode(code)
-    this.headers = this.validateHeaders(headers)
+    this.code = this._validateStatusCode(code)
+    this.headers = this._validateHeaders(headers)
     this.data = data || null // NOTE: avoid undefined
-    this.$data = $data && this.validateMetadata($data)
+    this.$data = $data && this._validateMetadata($data)
   }
 
+  /**
+   * Supported cast options.
+   *
+   * @type {string[]}
+   */
   static get CAST_OPTIONS () {
     return ['number', 'boolean', 'string']
   }
@@ -506,16 +517,16 @@ class ResponseHandler extends CommonHandler {
    * @param {ResponseMetadataObject} $data The metadata to validate
    * @returns {ResponseMetadataObject?}
    */
-  validateMetadata ($data) {
+  _validateMetadata ($data) {
     if ($data && typeof $data === 'object' && $data.constructor === Object) {
       const { cast, repeat } = $data
       if (cast && typeof cast === 'object') {
-        this.validateMetadataCastTypes(cast)
+        this._validateMetadataCastTypes(cast)
       } else if (typeof cast !== 'undefined') {
         throw new Error('Cast must be a key-value object')
       }
       if (repeat && repeat.toString() === repeat) {
-        this.validateMetadataRepeatOptions(repeat)
+        this._validateMetadataRepeatOptions(repeat)
       } else if (typeof repeat !== 'undefined') {
         throw new Error('Repeat must be a string')
       }
@@ -532,7 +543,7 @@ class ResponseHandler extends CommonHandler {
    * @throws {Error} Invalid repeat options: min(MIN) max(MAX)
    * @returns void
    */
-  validateMetadataRepeatOptions (repeat) {
+  _validateMetadataRepeatOptions (repeat) {
     if (!Array.isArray(this.data)) {
       throw new Error('Cannot use meta repeat on a non-array data')
     }
@@ -564,7 +575,7 @@ class ResponseHandler extends CommonHandler {
    * @throws {Error} Unsupported cast type
    * @returns void
    */
-  validateMetadataCastTypes (cast) {
+  _validateMetadataCastTypes (cast) {
     if (this.data === null || typeof this.data !== 'object') {
       throw new Error('Casting works only with response data objects')
     }
@@ -588,7 +599,7 @@ class ResponseHandler extends CommonHandler {
    * @throws {Error} Unsupported response HTTP status code
    * @returns void
    */
-  validateStatusCode (code) {
+  _validateStatusCode (code) {
     const statusCode = parseInt(code.toString())
     if (isNaN(statusCode)) {
       throw new Error(`Response HTTP status code invalid: ${code}`)
@@ -613,12 +624,12 @@ class ResponseHandler extends CommonHandler {
  * Except Case Object Interface.
  *
  * @type {{
- *  test: string[],
+ *  validate: string[],
  *  response: ResponseObject
  * }}
  */
 const ExceptCaseObject = {
-  test: [
+  validate: [
     'js code as one line of string',
     'js code as one line of string'
   ],
@@ -639,7 +650,7 @@ const ExceptCaseObject = {
  */
 const ExceptObject = {
   'Assert message goes here': {
-    test: [
+    validate: [
       'first function body to test',
       'second function body to test'
     ],
@@ -667,10 +678,40 @@ class ExceptHandler {
    * @param {ExceptObject} except The exceptions to handle
    */
   constructor (except) {
-    this.except = except
+    this.cases = this._validate(except)
   }
 
-  // TODO: Implement Function() evaluator to assert validation rules...
+  /**
+   * Check if the except cases object is properly formatted.
+   *
+   * @param {Record<string, ExceptCaseObject>} cases Except cases object to validate
+   * @retusns {Record<string, ExceptCaseObject>}
+   */
+  _validate (cases) {
+    if (cases && typeof cases === 'object' && cases.constructor === Object) {
+      for (const [assertion, { validate, response }] of Object.entries(cases)) {
+        if (!Array.isArray(validate) || validate.length === 0) {
+          throw new Error(`Except case "${assertion}" field "validate" ` +
+                `must be string[], got ${typeof validate}`)
+        }
+        for (let i = 0; i < validate.length; i++) {
+          const test = validate[i]
+          if (test.toString() !== test) {
+            throw new Error(`Except case "${assertion}" field "validate" ` +
+                    `must be string on position ${i}, got ${typeof test} instead`)
+          }
+        }
+        try {
+          new ResponseHandler(response)
+        } catch (e) {
+          throw new Error(`Except case "${assertion}" field "response" ` +
+            `incompatible with Response Object Interface: ${e.message}`)
+        }
+      }
+    }
+
+    return cases
+  }
 }
 
 /**

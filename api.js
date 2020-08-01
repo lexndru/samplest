@@ -31,7 +31,10 @@ const {
   RequestObject,
   RequestContextObject,
   ResponseHandler,
-  ResponseObject
+  ResponseObject,
+  ResponseMetadataObject,
+  ExceptObject,
+  ExceptHandler
 } = require('./lib')
 
 /**
@@ -39,13 +42,16 @@ const {
  *
  * @param {ContentBuilder} builder Instance of content builder
  * @param {any} api Instance of initialized API
+ * @param {CallableFunction?} callback Optional callback
  * @return void
  */
-function registerHttpCall (builder, api) {
+function registerHttpCall (builder, api, callback) {
   api[builder.request.method](builder.request.route, (req, res) => {
-    const { code, headers, content } = builder.refreshContent(req)
-    const datetime = new Date().toISOString()
-    console.log(`${datetime} - ${req.method} ${req.originalUrl} (${code})`)
+    const freshContent = builder.generate(req)
+    if (callback instanceof Function) {
+      callback(new Date(), freshContent, req, res)
+    }
+    const { code, headers, content } = freshContent
     res.set(headers).status(code).json(content)
   })
 }
@@ -77,12 +83,14 @@ const IncomingRequestObject = {
  * Outgoing Response Object Interface.
  *
  * @type {{
+ *  flow: string?,
  *  code: string,
  *  headers: Record<string, string>,
  *  content: any
  * }}
  */
 const OutgoingResponseObject = {
+  flow: 'string | null',
   code: 'string',
   headers: {
     string: 'string'
@@ -102,15 +110,14 @@ class ContentBuilder {
    * @param {{
    *  request: RequestObject,
    *  response: ResponseObject
+   *  except: ExceptObject?
    * }} content
    */
-  constructor ({ request, response }) {
+  constructor ({ request, response, except = null }) {
     this.startTime = new Date().getTime()
     this.request = new RequestHandler(request)
     this.response = new ResponseHandler(response)
-    this.responseHeadersCopy = JSON.stringify(this.response.headers)
-    this.responseContentCopy = JSON.stringify(this.response.data)
-    this.responseMetaOptions = { ...this.response.$data }
+    this.except = except && new ExceptHandler(except)
   }
 
   /**
@@ -119,18 +126,63 @@ class ContentBuilder {
    * @param {IncomingRequestObject} req The incoming HTTP request
    * @returns {OutgoingResponseObject}
    */
-  refreshContent (req) {
-    const ctx = this.buildRequestContext(req)
+  generate (req) {
+    const ctx = this._buildRequestContext(req)
 
-    const code = this.response.code
-    const headers = this.processHeaders(this.responseHeadersCopy, ctx)
-    const content = this.processContent(this.responseContentCopy, ctx)
+    if (this.except instanceof ExceptHandler) {
+      const except = this._validateExceptions(ctx)
+      if (except !== null) {
+        return this._generateResponse(ctx, except.response, except.assertion)
+      }
+    }
+
+    return this._generateResponse(ctx, this.response, null)
+  }
+
+  /**
+   * Generate OutgoingResponseObject from context and response object.
+   *
+   * @param {RequestContextObject} ctx Current request context
+   * @param {ResponseObject} res The response object to process
+   * @param {string?} flow Optional text to annouce a scenario
+   * @returns {OutgoingResponseObject}
+   */
+  _generateResponse (ctx, res, flow) {
+    const content = this._processContent(JSON.stringify(res.data), ctx)
 
     return {
-      code,
-      headers,
-      content: this.postprocessContent(content)
+      code: res.code,
+      headers: this._processHeaders(JSON.stringify(res.headers), ctx),
+      content: this._postprocessContent(content, { ...res.$data }),
+      flow
     }
+  }
+
+  /**
+   * Validate current incoming request against exception cases.
+   *
+   * @param {RequestContextObject} ctx The request context
+   * @returns {ResponseObject?}
+   */
+  _validateExceptions (ctx) {
+    for (const [assertion, caseObject] of Object.entries(this.except.cases)) {
+      const { validate, response } = caseObject
+      for (const T of validate) {
+        const fn = Function(`return (route, query, headers, payload) => ${T}`)
+        const rs = fn()(ctx.route, ctx.query, ctx.headers, ctx.payload)
+        if (rs === undefined) {
+          continue // NOTE: Allow the user to skip optional validations...
+        } else if (rs !== true) {
+          if (!response.headers) {
+            response.headers = {}
+          }
+          Object.assign(response.headers, { 'X-Assertion': assertion })
+          return { assertion, response }
+        }
+      }
+    }
+
+    return null
   }
 
   /**
@@ -139,7 +191,7 @@ class ContentBuilder {
    * @param {IncomingRequestObject} req The incoming HTTP request
    * @returns {RequestContextObject}
    */
-  buildRequestContext (req) {
+  _buildRequestContext (req) {
     return {
 
       // Inherit from request spec
@@ -160,7 +212,7 @@ class ContentBuilder {
    * @param {RequestContextObject} ctx The current context
    * @returns {Record<string, string>}
    */
-  processHeaders (rawHeaders, ctx) {
+  _processHeaders (rawHeaders, ctx) {
     /**
      * @param {string} text
      */
@@ -179,7 +231,7 @@ class ContentBuilder {
    * @param {RequestContextObject} ctx The current context
    * @returns {any}
    */
-  processContent (rawContent, ctx) {
+  _processContent (rawContent, ctx) {
     /**
      * @param {string} text
      */
@@ -191,12 +243,11 @@ class ContentBuilder {
   /**
    * Get new response data after all metadata have been processed.
    *
-   * @param {any} content
+   * @param {any} content Content after it has been generated
+   * @param {ResponseMetadataObject} _ Options to apply on content
    * @returns {any}
    */
-  postprocessContent (content) {
-    const { cast, repeat } = this.responseMetaOptions
-
+  _postprocessContent (content, { cast, repeat }) {
     if (repeat && Array.isArray(content)) {
       content = repeatContent(content, repeat)
     }
