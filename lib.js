@@ -698,11 +698,14 @@ class ExceptHandler {
           const test = validate[i]
           if (test.toString() !== test) {
             throw new Error(`Except case "${assertion}" field "validate" ` +
-                    `must be string on position ${i}, got ${typeof test} instead`)
+                `must be string on position ${i}, got ${typeof test} instead`)
           }
         }
         try {
-          new ResponseHandler(response)
+          const rh = new ResponseHandler(response)
+          if (!rh) {
+            throw new Error('Failed to create response handler from except')
+          }
         } catch (e) {
           throw new Error(`Except case "${assertion}" field "response" ` +
             `incompatible with Response Object Interface: ${e.message}`)
@@ -758,5 +761,6 @@ module.exports = {
   ResponseMetadataObject,
   ResponseHandler,
   ExceptObject,
+  ExceptCaseObject,
   ExceptHandler
 }
