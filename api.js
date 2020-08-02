@@ -114,7 +114,6 @@ class ContentBuilder {
    * }} content
    */
   constructor ({ request, response, except = null }) {
-    this.startTime = new Date().getTime()
     this.request = new RequestHandler(request)
     this.response = new ResponseHandler(response)
     this.except = except && new ExceptHandler(except)
@@ -168,8 +167,9 @@ class ContentBuilder {
     for (const [assertion, caseObject] of Object.entries(this.except.cases)) {
       const { validate, response } = caseObject
       for (const T of validate) {
-        const fn = Function(`return (route, query, headers, payload) => ${T}`)
-        const rs = fn()(ctx.route, ctx.query, ctx.headers, ctx.payload)
+        const fn = Function('process', 'require', // mockup JS functionalities 
+            `"use strict"; return ({ route, query, headers, payload }) => ${T}`)
+        const rs = fn()(ctx)
         if (rs === undefined) {
           continue // NOTE: Allow the user to skip optional validations...
         } else if (rs !== true) {

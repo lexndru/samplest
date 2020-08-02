@@ -33,6 +33,24 @@ const { registerHttpCall, ContentBuilder } = require('./api')
 const { RequestObject, ResponseObject } = require('./lib')
 
 /**
+ * Security warning for unsafe except cases.
+ *
+ * @param {string} file Unsafe filename
+ * @returns {string}
+ */
+function securityWarning (file) {
+  return `***
+Security warning! ExceptObject found in file "${file}"
+
+The ExceptObject allows deviation from the happy path, by allowing the user to
+have CUSTOM validation conditions. This feature require EXPLICIT permission to
+run JavaScript code!
+
+Restart samplest with the --allow-js flag, ONLY IF YOU KNOW WHAT YOU'RE DOING!
+***`
+}
+
+/**
  * General available style for CLI output.
  *
  * @type {object}
@@ -87,6 +105,16 @@ const cmd = new ArgumentParser({
   description: 'Design and use RESTful API from sample specs'
 })
 
+// Ask the user permission to run custom JS validation code from ExceptObject
+// By default, this feature is disabled because of potential security risks.
+//
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/Function
+cmd.addArgument(['--allow-js'], {
+  help: 'Give permission to run CUSTOM JS validation code',
+  action: 'storeTrue',
+  defaultValue: false
+})
+
 // There can be only one parent directory with any number of JSON
 // files as samplests.
 cmd.addArgument(['-s', '--scan'], {
@@ -97,11 +125,12 @@ cmd.addArgument(['-s', '--scan'], {
  * Start a development API from samplests.
  *
  * @param {string} dir The path to directory
+ * @param {boolean} allowJs Permission to run JS code
  * @param {string} host The hostname to bind
  * @param {number} port The port to listen
  * @returns {Promise<void>}
  */
-async function serve (dir, host, port) {
+async function serve (dir, allowJs, host, port) {
   const api = Express()
   api.disable('x-powered-by')
   api.use(BodyParser.json())
@@ -112,6 +141,9 @@ async function serve (dir, host, port) {
   try {
     for await (const [file, content] of scanDirectory(dir)) {
       const cb = new ContentBuilder(content)
+      if (cb.except !== null && allowJs !== true) {
+        throw new Error(`User permission required!\n${securityWarning(file)}`)
+      }
       registerHttpCall(cb, api, (date, { flow, code }, req) => {
         const entry = date.toISOString()
         const { method, originalUrl } = req
@@ -220,7 +252,7 @@ function dumpSamplest (filepath) {
 // Please open a ticket on github if you want to contribute.
 !(async (args, cmd) => {
   if (args.scan !== null) {
-    await serve(args.scan, host, port)
+    await serve(args.scan, args.allow_js, host, port)
   } else if (args.dump !== null) {
     dumpSamplest(args.dump)
   } else if (args.list !== null) {
