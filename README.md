@@ -10,20 +10,28 @@ $ npm install -g samplest
 
 ## How to use?
 ```
-$ samplest -s examples/safe
-Samplest v1.2.0 is up and running
+$ samplest -s examples --allow-js
+Samplest v1.3.0 is up and running
  Address: http://127.0.0.1:8080
   Launch: Sun Aug 02 2020 17:17:56 GMT+0300 (Eastern European Summer Time)
 Homepage: https://github.com/lexndru/samplest
-Overview: 3 file(s) imported
+Overview: 7 file(s) imported
 
-┌───────────────────────┬───────────────────────────────┐
-│ create.json           │ POST /api/v1/book             │
-├───────────────────────┼───────────────────────────────┤
-│ read-all-objects.json │ GET /api/v1/products          │
-├───────────────────────┼───────────────────────────────┤
-│ read-one-object.json  │ GET /api/v1/products/:product │
-└───────────────────────┴───────────────────────────────┘
+┌──────────────────────────────────────┬───────────────────────────────┐
+│ examples/safe/create.json            │ POST /api/v1/book             │
+├──────────────────────────────────────┼───────────────────────────────┤
+│ examples/safe/read-all-objects.json  │ GET /api/v1/products          │
+├──────────────────────────────────────┼───────────────────────────────┤
+│ examples/safe/read-all-strings.json  │ GET /api/v1/persons           │
+├──────────────────────────────────────┼───────────────────────────────┤
+│ examples/safe/read-one-object.json   │ GET /api/v1/products/:product │
+├──────────────────────────────────────┼───────────────────────────────┤
+│ examples/unsafe/delete.json          │ DELETE /api/v1/book/:book     │
+├──────────────────────────────────────┼───────────────────────────────┤
+│ examples/unsafe/read-one-string.json │ GET /api/v1/person/:person    │
+├──────────────────────────────────────┼───────────────────────────────┤
+│ examples/unsafe/update.json          │ PUT /api/v1/book/:book        │
+└──────────────────────────────────────┴───────────────────────────────┘
 ```
 
 ## Features
