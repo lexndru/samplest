@@ -167,7 +167,7 @@ class ContentBuilder {
     for (const [assertion, caseObject] of Object.entries(this.except.cases)) {
       const { validate, response } = caseObject
       for (const T of validate) {
-        const fn = Function('process', 'require', // mockup JS functionalities 
+        const fn = Function('process', 'require', // mockup JS functionalities
             `"use strict"; return ({ route, query, headers, payload }) => ${T}`)
         const rs = fn()(ctx)
         if (rs === undefined) {
